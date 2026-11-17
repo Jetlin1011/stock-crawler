@@ -1,0 +1,10 @@
+# Your watchlist — one NSE symbol per line (as shown in Kite), optionally ", Company Name".
+# These are always scanned (even outside the Nifty 500), marked ★ on the dashboard,
+# and get "exit warnings" listed first — so put the stocks you HOLD here too.
+#
+# Examples (replace with your own):
+RELIANCE, Reliance Industries
+TCS, Tata Consultancy Services
+HDFCBANK, HDFC Bank
+INFY, Infosys
+ITC, ITC

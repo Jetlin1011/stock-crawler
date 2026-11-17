@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stock Crawler — NSE dip watcher</title>
+<meta name="description" content="Daily NSE swing-trade dip ideas with probability, charts, news and track record.">
+<meta name="theme-color" content="#2f5bea">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<!-- iOS home-screen app -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stock Crawler">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+<script src="vendor/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <img class="logo" src="icons/icon-192.png" alt="" width="38" height="38">
+    <div>
+      <h1>Stock Crawler</h1>
+      <div class="sub" id="asof">Loading…</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <div id="regime" class="pill"></div>
+    <button id="refreshBtn" class="icon-btn" title="Refresh" aria-label="Refresh">⟳</button>
+  </div>
+</header>
+
+<div id="installHint" class="banner info" hidden></div>
+<div id="offline" class="banner" hidden>You're offline — showing the last saved scan.</div>
+
+<div id="demo" class="banner" hidden>DEMO DATA — synthetic prices for testing the layout. Not real stocks.</div>
+
+<section class="cards" id="cards"></section>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="buys" class="on">Buy-the-dip ideas</button>
+  <button data-tab="exits">Exit warnings</button>
+  <button data-tab="track">Track record</button>
+  <button data-tab="how">How it works</button>
+  <button data-tab="app">App &amp; alerts</button>
+</nav>
+
+<main>
+  <section id="tab-buys" class="tab on">
+    <div class="tools">
+      <input id="q" type="search" placeholder="Search symbol or name">
+      <label><input type="checkbox" id="onlyGood" checked> Only above break-even</label>
+      <label><input type="checkbox" id="onlyWatch"> Only my watchlist</label>
+    </div>
+    <div class="split">
+      <div id="buyList" class="list"></div>
+      <aside id="detail" class="detail"><div class="empty">Tap an idea to see its chart, levels and news.</div></aside>
+    </div>
+  </section>
+
+  <section id="tab-exits" class="tab">
+    <p class="note">Stocks whose pattern says the price is more likely to <b>fall</b>. Useful only for shares you
+      already hold (delivery accounts can't short). Your watchlist stocks are listed first.</p>
+    <div class="split">
+      <div id="exitList" class="list"></div>
+      <aside id="detail2" class="detail"><div class="empty">Tap a warning to see its chart.</div></aside>
+    </div>
+  </section>
+
+  <section id="tab-track" class="tab">
+    <div id="trackTop"></div>
+    <div class="tools">
+      <select id="tStatus"><option value="all">All</option><option value="open">Open</option><option value="closed">Closed</option></select>
+      <select id="tDir"><option value="1">Buy ideas</option><option value="-1">Exit warnings</option><option value="0">Both</option></select>
+      <label><input type="checkbox" id="tLive"> Hide replayed (backfilled) picks</label>
+    </div>
+    <div class="tablewrap"><table id="trackTable"></table></div>
+  </section>
+
+  <section id="tab-how" class="tab"><div id="how" class="prose"></div></section>
+
+  <section id="tab-app" class="tab">
+    <div class="prose">
+      <h3>Install on your phone</h3>
+      <p><b>iPhone / iPad:</b> open this page in <b>Safari</b> → tap <b>Share</b> (□↑) → <b>Add to Home Screen</b> → Add.
+        It then opens full-screen like a normal app.</p>
+      <p><b>Android:</b> Chrome menu ⋮ → <b>Install app</b> (or "Add to Home screen").</p>
+      <p><button id="installBtn" class="btn" hidden>Install app</button>
+        <span id="installState" class="nm"></span></p>
+
+      <h3>Phone notifications</h3>
+      <p>Get a push notification each evening when the new scan is ready (no Telegram needed).
+        On iPhone this works only <b>after</b> installing to the Home Screen (iOS 16.4 or newer), and you must open the
+        installed app to switch it on.</p>
+      <p><button id="pushBtn" class="btn">Turn on notifications</button> <span id="pushState" class="nm"></span></p>
+      <div id="pushCode" hidden>
+        <p>Last step (one time per device): copy this code and save it in GitHub → your repo → Settings →
+          Secrets and variables → Actions → secret <code>PUSH_SUBSCRIPTIONS</code>. For more than one device,
+          put each code on its own line in that same secret.</p>
+        <textarea id="pushJson" readonly rows="5"></textarea>
+        <p><button id="copyPush" class="btn ghost">Copy code</button></p>
+      </div>
+
+      <h3>Refreshing</h3>
+      <p>New results arrive once a day after market close (~6 PM IST). The app checks for them automatically whenever
+        you open it, when you come back to it, and every 15 minutes while it's open. You can also tap ⟳.</p>
+      <p class="nm" id="lastCheck"></p>
+    </div>
+  </section>
+</main>
+
+<footer>Signals come from historical price patterns and headline keywords. They are not investment advice —
+  you decide every trade, and you should always use a stop-loss.</footer>
+
+<div id="sheet" class="sheet" hidden></div>
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

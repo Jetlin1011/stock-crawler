@@ -1,0 +1,18 @@
+{
+  "name": "Stock Crawler — NSE dip watcher",
+  "short_name": "Stock Crawler",
+  "description": "Daily swing-trade dip ideas for NSE stocks with probability, charts, news and track record.",
+  "id": "./",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f7f9",
+  "theme_color": "#2f5bea",
+  "categories": ["finance"],
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
