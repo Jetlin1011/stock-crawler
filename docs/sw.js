@@ -1,9 +1,10 @@
 /* Service worker: offline app shell, always-fresh data, and push notifications. */
-const VERSION = "sc-v1";
+const VERSION = "sc-v2";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "manifest.webmanifest",
   "vendor/lightweight-charts.standalone.production.js",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png", "icons/favicon.png",
+  "fonts/plex-400.woff2", "fonts/plex-500.woff2", "fonts/plex-600.woff2", "fonts/plex-700.woff2",
 ];
 
 self.addEventListener("install", e => {

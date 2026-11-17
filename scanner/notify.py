@@ -1,4 +1,4 @@
-"""Telegram alert (free). Needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars."""
+"""Alerts: Telegram (optional) and Web Push to the installed app."""
 from __future__ import annotations
 
 import html
@@ -8,52 +8,54 @@ import os
 import requests
 
 from . import config as C
-from .engine import SETUP_BY_ID
 
 
-def _inr(x: float) -> str:
+def _inr(x) -> str:
+    if x is None:
+        return "–"
     return f"₹{x:,.2f}" if x < 1000 else f"₹{x:,.0f}"
 
 
-def build_message(meta: dict, buys: list[dict], exits: list[dict], track: dict, watch: set[str]) -> str:
+def _mood(mk: dict) -> str:
+    if mk.get("regime") == "up":
+        return "Uptrend (Nifty above its 200-day average)"
+    return "Downtrend: no dip buys until Nifty is back above its 200-day average"
+
+
+def build_message(d: dict) -> str:
     e = html.escape
-    reg = meta.get("regime")
-    reg_txt = {"up": "Nifty above 200-day avg ✅ (dips usually get bought)",
-               "down": "Nifty below 200-day avg ⚠️ (dip-buys work less often — be picky)"}.get(reg, "")
-    lines = [f"<b>📊 Stock Crawler — {e(meta['as_of_label'])}</b>", reg_txt, ""]
-    be = meta.get("config", {}).get("breakeven", 0.4)
-    good = [c for c in buys if c["prob"] >= be]
-    if good:
-        lines.append(f"<b>Top dip ideas</b> (hold up to {C.HORIZON_DAYS} trading days):")
-        for i, c in enumerate(good[:C.TOP_ALERT], 1):
-            flag = " ⚠️news" if c.get("news_flag") == "risk" else ""
-            star = " ⭐" if c["symbol"] in watch else ""
-            lines.append(
-                f"{i}. <b>{e(c['symbol'])}</b>{star} — {e(SETUP_BY_ID[c['setup']].name)} · "
-                f"<b>{c['prob']*100:.0f}%</b> ({c['base_n']} past cases){flag}\n"
-                f"    Close {_inr(c['close'])} · Target {_inr(c['target'])} · Stop {_inr(c['stop'])}")
+    meta, mk, setups, watch, mine = d["meta"], d["market"], d["setups"], d["watch"], d["mine"]
+    lines = [f"<b>📊 Stock Crawler — {e(meta['as_of_label'])}</b>",
+             f"Market: {e(_mood(mk))}",
+             f"Breadth: {round((mk.get('b50') or 0) * 100)}% of stocks above 50-day avg", ""]
+    if setups:
+        lines.append(f"<b>Buy at tomorrow's open</b> (leader dips, sell at first close above 5-day avg, max {C.MAX_HOLD} days):")
+        for i, s in enumerate(setups[:C.TOP_ALERT], 1):
+            flag = " ⚠️news" if s.get("news_flag") == "risk" else ""
+            lines.append(f"{i}. <b>{e(s['symbol'])}</b> {_inr(s['close'])} · {s['prob']*100:.0f}% past win rate, "
+                         f"avg {s['ev']*100:+.1f}%{flag}")
     else:
-        lines.append(f"No dip idea above the {be*100:.0f}% break-even today — sitting out is a fine trade.")
-    held = [c for c in exits if c["symbol"] in watch]
-    if held:
-        lines += ["", "<b>⚠️ Exit warnings on your watchlist:</b>"]
-        for c in held[:8]:
-            lines.append(f"• <b>{e(c['symbol'])}</b> — {e(SETUP_BY_ID[c['setup']].name)} "
-                         f"({c['prob']*100:.0f}% fell further historically)")
-    if track.get("resolved"):
-        lines += ["", f"Track record (buy ideas): {track['win_rate']*100:.0f}% hit target "
-                      f"· {track['resolved']} closed · avg {track['avg_ret']*100:+.1f}%/idea"]
+        lines.append("No leader-dip setups today. Nothing to buy — that's normal on most days.")
+    if watch:
+        lines += ["", "<b>Watch (could set up soon):</b> " + ", ".join(e(w["symbol"]) for w in watch[:8])]
+    weak = [m for m in mine if m.get("health") == "Weak"]
+    if weak:
+        lines += ["", "<b>⚠️ Your watchlist turning weak:</b> " + ", ".join(e(m["symbol"]) for m in weak[:8])]
+    secs = d.get("sectors") or []
+    if secs:
+        lines += ["", "<b>Hottest sectors (1 month):</b> " + ", ".join(
+            f"{e(s['name'])} {s['r21']*100:+.1f}%" for s in secs[:3] if s.get("r21") is not None)]
     url = os.environ.get("DASHBOARD_URL")
     if url:
-        lines += ["", f'<a href="{e(url)}">Open dashboard →</a>']
-    lines += ["", "<i>Signals from past price patterns, not advice. Always use the stop.</i>"]
+        lines += ["", f'<a href="{e(url)}">Open Stock Crawler →</a>']
+    lines += ["", "<i>Past-pattern statistics, not advice.</i>"]
     return "\n".join(lines)
 
 
 def send(text: str) -> bool:
     tok, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
     if not tok or not chat:
-        print("[notify] Telegram not configured — skipping. Message would be:\n" + text)
+        print("[notify] Telegram not configured — skipping")
         return False
     r = requests.post(f"https://api.telegram.org/bot{tok}/sendMessage",
                       json={"chat_id": chat, "text": text, "parse_mode": "HTML",
@@ -65,17 +67,18 @@ def send(text: str) -> bool:
 
 # --------------------------------------------------------------------------- web push (PWA)
 
-def push_payload(meta: dict, buys: list[dict], exits: list[dict], watch: set[str]) -> dict:
-    be = meta.get("config", {}).get("breakeven", 0.4)
-    good = [c for c in buys if c["prob"] >= be]
-    if good:
-        top = ", ".join(f"{c['symbol']} {c['prob']*100:.0f}%" for c in good[:4])
-        body = f"{len(good)} dip idea{'s' if len(good) != 1 else ''} above break-even: {top}"
+def push_payload(d: dict) -> dict:
+    meta, setups, watch, mine = d["meta"], d["setups"], d["watch"], d["mine"]
+    if setups:
+        top = ", ".join(f"{s['symbol']} {s['prob']*100:.0f}%" for s in setups[:4])
+        body = f"Buy at open: {top}"
     else:
-        body = "No strong dip ideas today."
-    held = [c["symbol"] for c in exits if c["symbol"] in watch]
-    if held:
-        body += " · ⚠ exit watch: " + ", ".join(held[:4])
+        body = "No setups today."
+    if watch:
+        body += f" · Watching {len(watch)}"
+    weak = [m["symbol"] for m in mine if m.get("health") == "Weak"]
+    if weak:
+        body += " · Weak: " + ", ".join(weak[:3])
     return {"title": f"Stock Crawler — {meta['as_of_label']}", "body": body,
             "url": os.environ.get("DASHBOARD_URL") or "./", "tag": "scan-" + meta["as_of"]}
 

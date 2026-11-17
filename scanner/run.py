@@ -1,4 +1,9 @@
-"""Daily pipeline:  python -m scanner.run [--universe nifty500|watchlist] [--demo] [--no-news] [--no-notify]"""
+"""Daily pipeline (model v2).
+
+    python -m scanner.run                      # live: Yahoo + NSE official files, news, alerts
+    python -m scanner.run --csv prices.csv.gz  # offline on exported data (no news / alerts)
+    python -m scanner.run --demo               # synthetic prices, for layout testing only
+"""
 from __future__ import annotations
 
 import argparse
@@ -11,27 +16,26 @@ import numpy as np
 import pandas as pd
 
 from . import config as C
-from . import data, engine, news, notify
-from .engine import SETUP_BY_ID, SETUPS
+from . import data, model, news, notify
 
 ROOT = data.ROOT
 OUT = os.path.join(ROOT, "docs", "data")
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
-# --------------------------------------------------------------------------- helpers
-
 def _clean(o):
     if isinstance(o, dict):
-        return {k: _clean(v) for k, v in o.items()}
+        return {str(k): _clean(v) for k, v in o.items()}
     if isinstance(o, (list, tuple)):
         return [_clean(v) for v in o]
     if isinstance(o, (np.floating, float)):
         return None if not math.isfinite(float(o)) else round(float(o), 5)
-    if isinstance(o, np.integer):
+    if isinstance(o, (np.integer,)):
         return int(o)
     if isinstance(o, np.bool_):
         return bool(o)
+    if isinstance(o, pd.Timestamp):
+        return o.strftime("%Y-%m-%d")
     return o
 
 
@@ -44,76 +48,72 @@ def _write(name, obj):
 def _read(name, default):
     p = os.path.join(OUT, name)
     if os.path.exists(p):
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(p, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
     return default
-
-
-def chart_data(df: pd.DataFrame) -> dict:
-    d = df.tail(C.CHART_BARS)
-    t = d.index.strftime("%Y-%m-%d").tolist()
-    r = lambda s: [None if not np.isfinite(x) else round(float(x), 2) for x in s.values]
-    return {"t": t, "o": r(d["Open"]), "h": r(d["High"]), "l": r(d["Low"]), "c": r(d["Close"]),
-            "v": [int(x) for x in d["Volume"].values], "sma50": r(d["sma50"]), "sma200": r(d["sma200"])}
 
 
 # --------------------------------------------------------------------------- track record
 
-def pick_record(c: dict, backfilled: bool) -> dict:
-    return {"id": f"{c['date']}:{c['symbol']}:{c['setup']}", "date": c["date"], "symbol": c["symbol"],
-            "name": c["name"], "setup": c["setup"], "direction": c["direction"], "prob": c["prob"],
-            "base_n": c["base_n"], "atr": c["atr"], "signal_close": c["close"],
-            "news_flag": c.get("news_flag"), "backfilled": backfilled, "status": "OPEN"}
+def _pick(p, sym, t, universe, sc, replay):
+    return {"id": f"{p.dates[t]:%Y-%m-%d}:{sym}", "date": p.dates[t].strftime("%Y-%m-%d"), "symbol": sym,
+            "name": universe.get(sym, {}).get("name", sym), "prob": round(sc["prob"], 4),
+            "ev": round(sc["ev"], 5), "signal_close": round(float(p.C[sym].iloc[t]), 2),
+            "replay": replay, "status": "PENDING"}
 
 
-def update_history(history: list[dict], prepared: dict[str, pd.DataFrame]) -> None:
-    for p in history:
-        if p["status"] not in ("OPEN", "PENDING"):
-            continue
-        df = prepared.get(p["symbol"])
-        if df is None:
-            continue
-        d = pd.Timestamp(p["date"])
-        if d not in df.index:
-            continue
-        t = df.index.get_loc(d)
-        r = engine.simulate(df["Open"].values, df["High"].values, df["Low"].values, df["Close"].values,
-                            t, p["atr"], p["direction"])
-        if "entry" not in r:                      # entry day hasn't happened yet
-            p["status"] = "PENDING"
-            continue
-        p.update({"status": r["status"], "entry": round(r["entry"], 2), "target": round(r["target"], 2),
-                  "stop": round(r["stop"], 2), "ret": round(r["ret"], 5),
-                  "last_price": round(r["exit_price"], 2),
-                  "days": (int(r["exit_idx"]) - t) if r.get("exit_idx") is not None else len(df) - 1 - t,
-                  "exit_date": df.index[r["exit_idx"]].strftime("%Y-%m-%d")
-                  if r.get("exit_idx") is not None else None})
+def replay_history(p, stats, universe):
+    S = p.f["signal"].values
+    start = max(0, len(p.dates) - C.BACKFILL_DAYS)
+    o, h, l, c, s5 = (x.values for x in (p.O, p.H, p.L, p.C, p.f[f"sma{C.EXIT_SMA}"]))
+    picks = []
+    for j, sym in enumerate(p.symbols):
+        last = -1
+        for t in np.flatnonzero(S[:, j]):
+            if t < start or t <= last:
+                continue
+            r = model.simulate(o[:, j], h[:, j], l[:, j], c[:, j], s5[:, j], t)
+            picks.append(_pick(p, sym, t, universe, model.score(stats, sym), True))
+            last = r["exit_idx"] if r.get("exit_idx") is not None else (t if r["status"] == "DONE" else len(p.dates))
+    return picks
 
 
-def track_summary(history: list[dict]) -> dict:
-    def summ(rows):
-        done = [p for p in rows if p["status"] in ("TARGET", "STOP", "EXPIRED")]
-        if not done:
-            return {"resolved": 0, "open": sum(p["status"] in ("OPEN", "PENDING") for p in rows)}
-        wins = sum(p["status"] == "TARGET" for p in done)
-        pos = sum((p.get("ret") or 0) > 0 for p in done)
-        return {"resolved": len(done), "wins": wins, "win_rate": wins / len(done),
-                "positive_rate": pos / len(done),
-                "avg_ret": float(np.mean([p.get("ret") or 0 for p in done])),
-                "open": sum(p["status"] in ("OPEN", "PENDING") for p in rows),
-                "avg_prob": float(np.mean([p["prob"] for p in done]))}
-    buys = [p for p in history if p["direction"] == 1]
-    out = summ(buys)
-    out["live_only"] = summ([p for p in buys if not p.get("backfilled")])
-    out["exits"] = summ([p for p in history if p["direction"] == -1])
-    out["by_setup"] = {s.id: summ([p for p in history if p["setup"] == s.id]) for s in SETUPS}
-    # calibration: does a higher probability actually hit more often?
-    bands = []
-    for lo, hi in ((0, .45), (.45, .55), (.55, .65), (.65, 1.01)):
-        b = summ([p for p in buys if lo <= p["prob"] < hi])
-        if b.get("resolved"):
-            bands.append({"band": f"{int(lo*100)}–{min(int(hi*100), 100)}%", **b})
-    out["calibration"] = bands
+def update_history(history, p):
+    pos = {d: i for i, d in enumerate(p.dates.strftime("%Y-%m-%d"))}
+    for k in history:
+        if k["status"] == "DONE" or k["symbol"] not in p.C.columns or k["date"] not in pos:
+            continue
+        j, t = p.C.columns.get_loc(k["symbol"]), pos[k["date"]]
+        r = model.simulate(p.O.values[:, j], p.H.values[:, j], p.L.values[:, j], p.C.values[:, j],
+                           p.f[f"sma{C.EXIT_SMA}"].values[:, j], t)
+        k["status"] = r["status"]
+        if "entry" in r:
+            k.update({"entry": round(r["entry"], 2), "price": round(r["price"], 2), "ret": round(r["ret"], 5),
+                      "days": int(r["days"]), "why": r.get("why"),
+                      "exit_date": p.dates[r["exit_idx"]].strftime("%Y-%m-%d") if r.get("exit_idx") else None})
+
+
+def summarize(history):
+    def s(rows):
+        done = [k for k in rows if k["status"] == "DONE"]
+        out = {"done": len(done), "open": sum(k["status"] in ("OPEN", "PENDING") for k in rows)}
+        if done:
+            rets = [k["ret"] for k in done]
+            out.update({"win": sum(r > 0 for r in rets) / len(rets), "avg": float(np.mean(rets)),
+                        "best": max(rets), "worst": min(rets),
+                        "days": float(np.mean([k["days"] for k in done]))})
+        return out
+    out = s(history)
+    out["live"] = s([k for k in history if not k.get("replay")])
+    months = {}
+    for k in history:
+        if k["status"] == "DONE":
+            months.setdefault(k["date"][:7], []).append(k["ret"])
+    out["months"] = [{"m": m, "n": len(v), "avg": float(np.mean(v)), "win": sum(r > 0 for r in v) / len(v)}
+                     for m, v in sorted(months.items())][-12:]
     return out
 
 
@@ -121,109 +121,160 @@ def track_summary(history: list[dict]) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--universe", default=os.environ.get("UNIVERSE", "nifty500"),
-                    choices=["nifty500", "watchlist"])
-    ap.add_argument("--demo", action="store_true", help="synthetic prices, no network (for testing)")
+    ap.add_argument("--universe", default=os.environ.get("UNIVERSE", "nifty500"), choices=["nifty500", "watchlist"])
+    ap.add_argument("--csv", help="offline: exported prices.csv.gz")
+    ap.add_argument("--demo", action="store_true")
     ap.add_argument("--no-news", action="store_true")
     ap.add_argument("--no-notify", action="store_true")
-    ap.add_argument("--rebuild", action="store_true", help="wipe track record and backfill again")
+    ap.add_argument("--rebuild", action="store_true")
     a = ap.parse_args()
+    now = datetime.now(IST)
+    dinfo = {"source": "Yahoo Finance", "patched_days": [], "nse_ok": None, "delivery": {}}
 
-    # 1. universe + prices
     if a.demo:
         from . import demo
         universe, watch, raw, index_df = demo.make()
-        a.no_news = True
+        a.no_news = a.no_notify = True
+        dinfo["source"] = "demo"
+    elif a.csv:
+        raw, index_df = data.load_csv(a.csv)
+        universe, watch = {}, set(data.read_watchlist())
+        ucsv = os.path.join(os.path.dirname(os.path.abspath(a.csv)), "universe.csv")
+        if os.path.exists(ucsv):
+            u = pd.read_csv(ucsv).fillna("")
+            universe = {r["symbol"]: {"name": r["name"], "industry": r["industry"]} for _, r in u.iterrows()}
+        a.no_news = a.no_notify = True
+        dinfo["source"] = "exported file"
     else:
         universe, watch = data.load_universe(a.universe)
-        hist_syms = {p["symbol"] for p in _read("history.json", []) if p["status"] in ("OPEN", "PENDING")}
-        symbols = sorted(set(universe) | hist_syms)
-        print(f"[run] scanning {len(symbols)} symbols")
+        symbols = sorted(universe)
+        print(f"[run] downloading {len(symbols)} symbols")
         raw = data.fetch_history(symbols, C.HISTORY_YEARS)
         index_df = data.fetch_index(C.HISTORY_YEARS)
+        try:
+            dinfo.update(data.patch_with_nse(raw, index_df, now))
+            if dinfo["patched_days"]:
+                dinfo["source"] = "Yahoo Finance + NSE official file"
+        except Exception as e:
+            print(f"[nse] patch failed: {e}")
     if not raw:
-        raise SystemExit("No price data downloaded — aborting so yesterday's dashboard stays intact.")
+        raise SystemExit("No price data — aborting so the last dashboard stays intact.")
 
-    # 2. indicators + signals
-    prepared = {s: engine.prepare(df) for s, df in raw.items()}
-    as_of = max(df.index[-1] for df in prepared.values())
-    print(f"[run] {len(prepared)} stocks with data, latest bar {as_of.date()}")
+    p = model.build(raw, index_df)
+    t = len(p.dates) - 1
+    as_of = p.dates[t]
+    print(f"[run] {len(p.symbols)} stocks, latest bar {as_of.date()}")
 
-    # 3. backtest every setup on every stock -> base rates
-    st = engine.backtest(prepared, index_df)
-    for s in SETUPS:
-        b = st.setup.get((s.id, "all"))
-        if b and b.n:
-            print(f"  {s.id:<14} n={b.n:<5} hit={b.rate*100:5.1f}%  avg={b.avg_ret*100:+.2f}%")
+    trades, stats = model.backtest(p)
+    bt = {k: stats[k].js() for k in ("all", "train", "test")}
+    bt["years"] = {str(y): b.js() for y, b in sorted(stats["years"].items())}
+    print(f"[run] backtest all={bt['all']} test={bt['test']}")
 
-    # 4. track record (backfill on first run)
-    history = [] if a.rebuild else _read("history.json", [])
-    known = {p["id"] for p in history}
-    if not history:
-        dates = sorted({d for df in prepared.values() for d in df.index if d < as_of})[-C.BACKFILL_DAYS:]
-        print(f"[run] first run: backfilling {len(dates)} days of picks")
-        for d in dates:
-            cands = engine.candidates_at(prepared, st, index_df, d, universe)
-            for c in engine.rank(cands, 1, C.TOP_BUY) + engine.rank(cands, -1, C.TOP_EXIT, watch):
-                rec = pick_record(c, backfilled=True)
-                if rec["id"] not in known:
-                    history.append(rec)
-                    known.add(rec["id"])
+    # ---- today's lists
+    sig = p.f["signal"].iloc[t]
+    setups = []
+    for sym in sig[sig].index:
+        row = model.stock_row(p, sym, t, universe)
+        sc = model.score(stats, sym)
+        row.update({k: (round(v, 5) if isinstance(v, float) else v) for k, v in sc.items()})
+        setups.append(row)
+    setups.sort(key=lambda r: (r["prob"], r["ev"]), reverse=True)
 
-    # 5. today's candidates
-    cands = engine.candidates_at(prepared, st, index_df, as_of, universe)
-    pre_buy = engine.rank(cands, 1, C.NEWS_FOR_TOP)
-    pre_exit = engine.rank(cands, -1, C.TOP_EXIT, watch)
+    w = p.f["watch"].iloc[t]
+    watchl = [model.stock_row(p, s, t, universe) for s in w[w].index]
+    watchl.sort(key=lambda r: r["rsi2"] if r["rsi2"] is not None else 99)
+    watchl = watchl[:20]
+
+    m = p.f["mom"].iloc[t].where(p.f["liquid"].iloc[t] & (p.C.iloc[t] > p.f["sma200"].iloc[t]))
+    leaders = [model.stock_row(p, s, t, universe) for s in m.dropna().sort_values(ascending=False).index[:C.TOP_LEADERS]]
+    for i, r in enumerate(leaders, 1):
+        r["rank"] = i
+
+    mine = []
+    for s in sorted(watch):
+        if s in p.C.columns and np.isfinite(p.C[s].iloc[t]):
+            r = model.stock_row(p, s, t, universe)
+            mp = r["mom_pct"] or 0
+            r["health"] = ("Strong" if (mp >= 0.6 and r["above50"]) else
+                           "Weak" if (not r["above200"] or mp < 0.3) else "Mixed")
+            mine.append(r)
+
+    for r in setups + watchl + leaders + mine:
+        r["delivery"] = dinfo["delivery"].get(r["symbol"])
+        r["watchlist"] = r["symbol"] in watch
+
     if not a.no_news:
-        print(f"[run] checking news for {len(pre_buy) + len(pre_exit)} stocks")
-        news.enrich(pre_buy + pre_exit)
-    buys = engine.rank(pre_buy, 1, C.TOP_BUY)
-    exits = engine.rank(pre_exit, -1, C.TOP_EXIT, watch)
-    for c in buys + exits:
-        c["watchlist"] = c["symbol"] in watch
-        c["chart"] = chart_data(prepared[c["symbol"]])
-        rec = pick_record(c, backfilled=False)
-        if rec["id"] not in known:
-            history.append(rec)
-            known.add(rec["id"])
+        seen, todo = set(), []
+        for r in setups + watchl[:10] + leaders[:15] + mine:
+            if r["symbol"] not in seen:
+                seen.add(r["symbol"])
+                todo.append(r)
+        todo = todo[:C.NEWS_MAX_STOCKS]
+        print(f"[run] news for {len(todo)} stocks")
+        news.enrich(todo)
+        bysym = {r["symbol"]: r for r in todo}
+        for r in setups + watchl + leaders + mine:
+            src = bysym.get(r["symbol"])
+            if src is not None and r is not src:
+                r["news"], r["news_flag"] = src.get("news"), src.get("news_flag")
 
-    update_history(history, prepared)
-    history.sort(key=lambda p: (p["date"], -p["prob"]), reverse=True)
-    track = track_summary(history)
+    # ---- track record
+    prev_meta = _read("latest.json", {}).get("meta", {})
+    history = _read("history.json", [])
+    if a.rebuild or prev_meta.get("model") != C.MODEL_VERSION or not history:
+        print("[run] new model version: replaying track record")
+        history = replay_history(p, stats, universe)
+    known = {k["id"] for k in history}
+    open_syms = {k["symbol"] for k in history if k["status"] in ("OPEN", "PENDING")}
+    for r in setups:
+        pk = _pick(p, r["symbol"], t, universe, r, False)
+        if pk["id"] not in known and r["symbol"] not in open_syms:
+            history.append(pk)
+    update_history(history, p)
+    history.sort(key=lambda k: (k["date"], k["prob"]), reverse=True)
+    track = summarize(history)
 
-    # 6. regime
-    regime = engine.regime_series(index_df, pd.DatetimeIndex([as_of]))[0]
-    nifty = None
-    if index_df is not None and len(index_df) > 200:
-        ic = index_df["Close"]
-        nifty = {"close": float(ic.iloc[-1]), "sma200": float(ic.rolling(200).mean().iloc[-1]),
-                 "chg": float(ic.iloc[-1] / ic.iloc[-2] - 1)}
+    # ---- charts (loaded lazily by the app)
+    charts = {}
+    for r in setups + watchl + leaders + mine:
+        if r["symbol"] not in charts:
+            charts[r["symbol"]] = model.chart(p, r["symbol"])
 
-    now = datetime.now(IST)
-    meta = {"as_of": as_of.strftime("%Y-%m-%d"), "as_of_label": as_of.strftime("%a %d %b %Y"),
-            "generated": now.strftime("%Y-%m-%d %H:%M IST"), "regime": regime, "nifty": nifty,
-            "universe": "demo" if a.demo else a.universe, "scanned": len(prepared),
-            "demo": bool(a.demo), "news": not a.no_news,
+    expected = pd.Timestamp(now.date()) if now.hour >= 19 else pd.Timestamp(now.date()) - pd.Timedelta(days=1)
+    while expected.weekday() >= 5:
+        expected -= pd.Timedelta(days=1)
+    dinfo_out = {"source": dinfo["source"], "patched_days": dinfo["patched_days"], "nse_ok": dinfo["nse_ok"],
+                 "delivery_date": dinfo.get("delivery_date"),
+                 "stale": bool(as_of < expected and not a.csv and not a.demo),
+                 "expected": expected.strftime("%Y-%m-%d")}
+
+    mk = model.market(p)
+    secs = model.sectors(p, universe)
+    meta = {"model": C.MODEL_VERSION, "as_of": as_of.strftime("%Y-%m-%d"), "as_of_label": as_of.strftime("%a %d %b %Y"),
+            "generated": now.strftime("%Y-%m-%d %H:%M IST"), "scanned": len(p.symbols),
+            "universe": "demo" if a.demo else a.universe, "demo": a.demo, "news": not a.no_news, "data": dinfo_out,
             "vapid_public": os.environ.get("VAPID_PUBLIC_KEY") or None,
-            "config": {"horizon": C.HORIZON_DAYS, "target_atr": C.TARGET_ATR, "stop_atr": C.STOP_ATR,
-                       "years": C.HISTORY_YEARS, "min_turnover_cr": C.MIN_TURNOVER_CR,
-                       "breakeven": C.STOP_ATR / (C.STOP_ATR + C.TARGET_ATR)},
-            "setups": [{"id": s.id, "name": s.name, "direction": s.direction, "explain": s.explain}
-                       for s in SETUPS],
-            "setup_stats": st.to_json()}
+            "rules": {"leader_pct": C.LEADER_PCT, "dip_rsi2": C.DIP_RSI2, "watch_rsi2": C.WATCH_RSI2,
+                      "max_vol": C.MAX_VOL_MULT, "max_hold": C.MAX_HOLD, "exit_sma": C.EXIT_SMA,
+                      "cost": C.COST_ROUNDTRIP, "min_turnover_cr": C.MIN_TURNOVER_CR,
+                      "test_split": C.TEST_SPLIT, "years": C.HISTORY_YEARS},
+            "backtest": bt}
 
-    prev = _read("latest.json", {}).get("meta", {}).get("as_of")
-    _write("latest.json", {"meta": meta, "buys": buys, "exits": exits, "track": track})
-    _write("history.json", history)
-    print(f"[run] wrote {len(buys)} buy ideas, {len(exits)} exit warnings, history={len(history)}")
+    _write("latest.json", {"meta": meta, "market": mk, "setups": setups, "watch": watchl,
+                           "leaders": leaders, "sectors": secs, "mine": mine, "track": track})
+    _write("history.json", history[:1500])
+    _write("charts.json", charts)
+    print(f"[run] setups={len(setups)} watch={len(watchl)} leaders={len(leaders)} history={len(history)}")
 
     if a.no_notify:
         return
-    if prev == meta["as_of"]:
-        print("[run] no new trading day since last run — not sending alert")
+    if prev_meta.get("as_of") == meta["as_of"] and prev_meta.get("model") == C.MODEL_VERSION:
+        print("[run] no new trading day — no alert")
         return
-    notify.send(notify.build_message(meta, buys, exits, track, watch))
-    notify.send_push(notify.push_payload(meta, buys, exits, watch))
+    payload = {"meta": meta, "setups": setups, "watch": watchl, "mine": mine, "track": track,
+               "market": mk, "sectors": secs}
+    notify.send(notify.build_message(payload))
+    notify.send_push(notify.push_payload(payload))
 
 
 if __name__ == "__main__":

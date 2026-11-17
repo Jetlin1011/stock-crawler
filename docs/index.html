@@ -3,119 +3,141 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Stock Crawler — NSE dip watcher</title>
-<meta name="description" content="Daily NSE swing-trade dip ideas with probability, charts, news and track record.">
-<meta name="theme-color" content="#2f5bea">
+<title>Stock Crawler</title>
+<meta name="description" content="Evening briefing for NSE swing trades: momentum leaders, dip setups, sectors and track record.">
+<meta name="theme-color" content="#EDF1EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1512" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/favicon.png">
-<!-- iOS home-screen app -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Stock Crawler">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="fonts/plex-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/plex-600.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
-<script src="vendor/lightweight-charts.standalone.production.js"></script>
+<script src="vendor/lightweight-charts.standalone.production.js" defer></script>
 </head>
 <body>
-<header class="top">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-today" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-lead" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+  <symbol id="i-sect" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></symbol>
+  <symbol id="i-rec" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+</svg>
+
+<header class="bar">
   <div class="brand">
-    <img class="logo" src="icons/icon-192.png" alt="" width="38" height="38">
-    <div>
-      <h1>Stock Crawler</h1>
-      <div class="sub" id="asof">Loading…</div>
-    </div>
+    <img src="icons/icon-192.png" alt="" width="30" height="30">
+    <span>Stock Crawler</span>
   </div>
-  <div class="hdr-r">
-    <div id="regime" class="pill"></div>
-    <button id="refreshBtn" class="icon-btn" title="Refresh" aria-label="Refresh">⟳</button>
-  </div>
+  <nav class="tabs" id="tabs" aria-label="Sections">
+    <button data-tab="today" class="on"><svg><use href="#i-today"/></svg><span>Today</span></button>
+    <button data-tab="leaders"><svg><use href="#i-lead"/></svg><span>Leaders</span></button>
+    <button data-tab="sectors"><svg><use href="#i-sect"/></svg><span>Sectors</span></button>
+    <button data-tab="record"><svg><use href="#i-rec"/></svg><span>Record</span></button>
+    <button data-tab="more"><svg><use href="#i-more"/></svg><span>More</span></button>
+  </nav>
+  <button id="refreshBtn" class="icon-btn" aria-label="Check for new results"><svg><use href="#i-refresh"/></svg></button>
 </header>
 
-<div id="installHint" class="banner info" hidden></div>
-<div id="offline" class="banner" hidden>You're offline — showing the last saved scan.</div>
+<div id="notice" class="notice" hidden></div>
 
-<div id="demo" class="banner" hidden>DEMO DATA — synthetic prices for testing the layout. Not real stocks.</div>
-
-<section class="cards" id="cards"></section>
-
-<nav class="tabs" id="tabs">
-  <button data-tab="buys" class="on">Buy-the-dip ideas</button>
-  <button data-tab="exits">Exit warnings</button>
-  <button data-tab="track">Track record</button>
-  <button data-tab="how">How it works</button>
-  <button data-tab="app">App &amp; alerts</button>
-</nav>
-
-<main>
-  <section id="tab-buys" class="tab on">
-    <div class="tools">
-      <input id="q" type="search" placeholder="Search symbol or name">
-      <label><input type="checkbox" id="onlyGood" checked> Only above break-even</label>
-      <label><input type="checkbox" id="onlyWatch"> Only my watchlist</label>
-    </div>
-    <div class="split">
-      <div id="buyList" class="list"></div>
-      <aside id="detail" class="detail"><div class="empty">Tap an idea to see its chart, levels and news.</div></aside>
-    </div>
-  </section>
-
-  <section id="tab-exits" class="tab">
-    <p class="note">Stocks whose pattern says the price is more likely to <b>fall</b>. Useful only for shares you
-      already hold (delivery accounts can't short). Your watchlist stocks are listed first.</p>
-    <div class="split">
-      <div id="exitList" class="list"></div>
-      <aside id="detail2" class="detail"><div class="empty">Tap a warning to see its chart.</div></aside>
-    </div>
-  </section>
-
-  <section id="tab-track" class="tab">
-    <div id="trackTop"></div>
-    <div class="tools">
-      <select id="tStatus"><option value="all">All</option><option value="open">Open</option><option value="closed">Closed</option></select>
-      <select id="tDir"><option value="1">Buy ideas</option><option value="-1">Exit warnings</option><option value="0">Both</option></select>
-      <label><input type="checkbox" id="tLive"> Hide replayed (backfilled) picks</label>
-    </div>
-    <div class="tablewrap"><table id="trackTable"></table></div>
-  </section>
-
-  <section id="tab-how" class="tab"><div id="how" class="prose"></div></section>
-
-  <section id="tab-app" class="tab">
-    <div class="prose">
-      <h3>Install on your phone</h3>
-      <p><b>iPhone / iPad:</b> open this page in <b>Safari</b> → tap <b>Share</b> (□↑) → <b>Add to Home Screen</b> → Add.
-        It then opens full-screen like a normal app.</p>
-      <p><b>Android:</b> Chrome menu ⋮ → <b>Install app</b> (or "Add to Home screen").</p>
-      <p><button id="installBtn" class="btn" hidden>Install app</button>
-        <span id="installState" class="nm"></span></p>
-
-      <h3>Phone notifications</h3>
-      <p>Get a push notification each evening when the new scan is ready (no Telegram needed).
-        On iPhone this works only <b>after</b> installing to the Home Screen (iOS 16.4 or newer), and you must open the
-        installed app to switch it on.</p>
-      <p><button id="pushBtn" class="btn">Turn on notifications</button> <span id="pushState" class="nm"></span></p>
-      <div id="pushCode" hidden>
-        <p>Last step (one time per device): copy this code and save it in GitHub → your repo → Settings →
-          Secrets and variables → Actions → secret <code>PUSH_SUBSCRIPTIONS</code>. For more than one device,
-          put each code on its own line in that same secret.</p>
-        <textarea id="pushJson" readonly rows="5"></textarea>
-        <p><button id="copyPush" class="btn ghost">Copy code</button></p>
+<main id="main">
+  <section id="tab-today" class="tab on" aria-label="Today">
+    <div class="brief" id="brief"></div>
+    <div class="cols">
+      <div>
+        <h2 id="buyTitle">Buy at the next open</h2>
+        <p class="lede" id="buyLede"></p>
+        <div id="setups" class="rows"></div>
+        <h2>On watch</h2>
+        <p class="lede">Leaders already dipping. Any of these can become a setup after the next close.</p>
+        <div id="watch" class="rows"></div>
       </div>
+      <div>
+        <h2>Your watchlist</h2>
+        <p class="lede">Trend health of the stocks in <code>watchlist.txt</code>. It describes the trend; it isn't a prediction.</p>
+        <div id="mine" class="rows"></div>
+      </div>
+    </div>
+  </section>
 
-      <h3>Refreshing</h3>
-      <p>New results arrive once a day after market close (~6 PM IST). The app checks for them automatically whenever
-        you open it, when you come back to it, and every 15 minutes while it's open. You can also tap ⟳.</p>
-      <p class="nm" id="lastCheck"></p>
+  <section id="tab-leaders" class="tab" aria-label="Momentum leaders">
+    <h2>Momentum leaders</h2>
+    <p class="lede">The strongest liquid stocks over 6–12 months, ranked the way NSE's momentum indices rank them.
+      Buy-the-dip setups only come from this list.</p>
+    <div class="map-wrap">
+      <div class="map-head"><b>Where the leaders are now</b>
+        <span class="muted">Across: 1-month move. Up and down: last 5 days. Bottom-right is the dip zone.</span></div>
+      <div id="leaderMap" class="map"></div>
+    </div>
+    <div class="filters" id="stateFilters"></div>
+    <div class="tablewrap"><table id="leaderTable" class="grid"></table></div>
+  </section>
+
+  <section id="tab-sectors" class="tab" aria-label="Sectors and market">
+    <h2>Sectors</h2>
+    <div class="seg" id="secPeriod" aria-label="Period">
+      <button data-k="r1">1 day</button><button data-k="r5">1 week</button><button data-k="r21" class="on">1 month</button><button data-k="r63">3 months</button>
+    </div>
+    <div id="heat" class="heat"></div>
+    <div id="secDetail" class="sec-detail" hidden></div>
+    <div class="cols">
+      <div>
+        <h2>Nifty 50 this year</h2>
+        <p class="lede">Dip buys switch on only while Nifty is above its 200-day average (dashed line).</p>
+        <div id="niftyChart" class="chart"></div>
+      </div>
+      <div>
+        <h2>Market breadth</h2>
+        <p class="lede">Share of scanned stocks above their 50-day (solid) and 200-day (dashed) averages.</p>
+        <div id="breadthChart" class="chart"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-record" class="tab" aria-label="Track record">
+    <h2>How the rule has done</h2>
+    <div id="recTop"></div>
+    <h2>Every pick</h2>
+    <div class="filters">
+      <select id="rStatus" aria-label="Status"><option value="all">All picks</option><option value="open">Open</option><option value="done">Closed</option></select>
+      <label><input type="checkbox" id="rLive"> Hide replayed picks</label>
+    </div>
+    <div class="tablewrap"><table id="recTable" class="grid"></table></div>
+  </section>
+
+  <section id="tab-more" class="tab" aria-label="Help and settings">
+    <div class="prose" id="how"></div>
+    <div class="prose">
+      <h2>Install on your phone</h2>
+      <p><b>iPhone:</b> open this page in Safari, tap Share, then Add to Home Screen.
+        <b>Android:</b> Chrome menu, then Install app.</p>
+      <p><button id="installBtn" class="btn" hidden>Install app</button> <span id="installState" class="muted"></span></p>
+      <h2>Notifications</h2>
+      <p>After each evening scan you get a notification with the setups. On iPhone, switch this on from the installed app (iOS 16.4 or newer).</p>
+      <p><button id="pushBtn" class="btn">Turn on notifications</button> <span id="pushState" class="muted"></span></p>
+      <div id="pushCode" hidden>
+        <p>Save this code in GitHub as the secret <code>PUSH_SUBSCRIPTIONS</code>, one line per device.</p>
+        <textarea id="pushJson" readonly rows="4" aria-label="Device code"></textarea>
+        <p><button id="copyPush" class="btn quiet">Copy code</button></p>
+      </div>
+      <p class="muted" id="lastCheck"></p>
     </div>
   </section>
 </main>
 
-<footer>Signals come from historical price patterns and headline keywords. They are not investment advice —
-  you decide every trade, and you should always use a stop-loss.</footer>
+<footer class="foot">Statistics from past prices, not investment advice. You place every trade yourself.</footer>
 
-<div id="sheet" class="sheet" hidden></div>
-<div id="toast" class="toast" hidden></div>
-<script src="app.js"></script>
+<div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="sheet-card" id="sheetCard"></div>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="app.js" defer></script>
 </body>
 </html>

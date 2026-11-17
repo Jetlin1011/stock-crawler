@@ -1,15 +1,18 @@
 # Stock Crawler — NSE "temporary dip" watcher
 
-Every weekday evening (6 PM IST) this:
+Every weekday evening (about 6:45 PM IST) this:
 
-1. Downloads daily prices for the **Nifty 500 + your watchlist** (free, via Yahoo Finance).
-2. Looks for **dip patterns in healthy stocks** (pullback in an uptrend, sharp 2–3 day selloff, gap-down bought back,
-   heavy-volume flush) and **exit warnings** (breakdown on volume, overextended rally).
-3. Gives each idea a **probability**: how often that same pattern hit its target before its stop within 7 trading days,
-   replayed over the last 4 years on every stock, split by market regime and blended with that stock's own record.
-4. Checks **Google News headlines** for the top ideas and flags real bad news (fraud, raids, downgrades, results misses…).
-5. Sends you a **phone notification** (app push and/or Telegram) and updates the **Stock Crawler app**: an installable
-   PWA for iPhone and Android with charts, levels, news and a **track record** showing whether past ideas actually worked.
+1. Downloads daily prices for the **Nifty 500 + your watchlist** from Yahoo Finance, and fills in any day Yahoo is
+   late with **NSE's official end-of-day file** (which also gives delivery %).
+2. Ranks every stock by **momentum** (6- and 12-month return divided by volatility, the way NSE's momentum indices do)
+   and builds the **leaders list**: the top 20%, above their 200-day average and liquid.
+3. Finds **leader dips**: a leader whose 2-day RSI drops below 5 on normal volume while Nifty is above its 200-day
+   average. Plan: buy at the next open, sell at the first close above the 5-day average (max 10 trading days).
+   This rule was chosen by testing on 6 years of real NSE prices: it was tuned on data before July 2024 and stayed
+   profitable after ~0.35% costs on the unseen period after it. Older "any dip" rules lost money there.
+4. Builds the app: market mood and breadth, buy list, watch list, your watchlist's trend health, momentum leaders map,
+   sector heatmap, Nifty and breadth charts, and a track record of every pick.
+5. Checks Google News headlines for the shortlisted stocks, then sends a **push notification** (and Telegram if set up).
 
 It never places orders. You trade manually in Zerodha Kite.
 
@@ -80,15 +83,18 @@ holdings get exit warnings listed first, marked ★.
 ---
 
 ## How to use the signals in Kite
-1. Read the alert / dashboard in the evening.
-2. Next morning, if the stock opens near the signal close (not a big gap up), buy in **CNC (delivery)**.
-3. Immediately place a **GTT OCO**: target and stop recalculated from your actual fill
-   (target ≈ fill + 1.5 × ATR, stop ≈ fill − 1 × ATR; ATR is shown on each idea).
-4. If neither hits in 7 trading days, exit anyway.
-5. Size each trade so hitting the stop loses only 1–2% of your trading capital.
+1. Read the notification / Today tab in the evening.
+2. Next morning, buy each setup in **CNC (delivery)** near the open. Skip it if it opens more than 2% above the signal close.
+3. Each evening, check the stock's page: once it has closed above its 5-day average, sell the next morning.
+   Sell anyway after 10 trading days.
+4. Use the same amount on every trade, and keep any one stock to 5–10% of your trading money.
 
-Read the **Track record** tab regularly. The "Live" number (ideas made after launch, not replayed) is the real test.
-If after ~2 months the live hit rate is under the 40% break-even, don't trade it.
+Read the **Record** tab regularly. The "Live since launch" number is the real test. If after a few months live
+results are negative after costs, stop trading it.
+
+## Research data
+The **Export research data** workflow saves 6 years of prices to the `research-data` branch. Run the scanner offline on it:
+`python -m scanner.run --csv prices.csv.gz` (needs `universe.csv` next to it).
 
 ## Updating the app later
 If you change files in `docs/`, bump `VERSION` at the top of `docs/sw.js` (e.g. `sc-v2`) so phones pick up the new
