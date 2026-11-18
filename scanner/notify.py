@@ -36,6 +36,9 @@ def build_message(d: dict) -> str:
                          f"avg {s['ev']*100:+.1f}%{flag}")
     else:
         lines.append("No leader-dip setups today. Nothing to buy — that's normal on most days.")
+    if d.get("sells"):
+        lines += ["", "<b>Sell at tomorrow's open</b> (closed above 5-day avg): " + ", ".join(
+            f"{e(x['symbol'])} {x['pick']['ret']*100:+.1f}%" for x in d["sells"][:8])]
     if watch:
         lines += ["", "<b>Watch (could set up soon):</b> " + ", ".join(e(w["symbol"]) for w in watch[:8])]
     weak = [m for m in mine if m.get("health") == "Weak"]
@@ -74,6 +77,8 @@ def push_payload(d: dict) -> dict:
         body = f"Buy at open: {top}"
     else:
         body = "No setups today."
+    if d.get("sells"):
+        body += " · Sell: " + ", ".join(x["symbol"] for x in d["sells"][:3])
     if watch:
         body += f" · Watching {len(watch)}"
     weak = [m["symbol"] for m in mine if m.get("health") == "Weak"]

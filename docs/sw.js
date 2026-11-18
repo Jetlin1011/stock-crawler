@@ -1,5 +1,5 @@
 /* Service worker: offline app shell, always-fresh data, and push notifications. */
-const VERSION = "sc-v2";
+const VERSION = "sc-v3";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "manifest.webmanifest",
   "vendor/lightweight-charts.standalone.production.js",

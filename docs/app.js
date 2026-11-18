@@ -50,7 +50,7 @@ async function refresh(manual = false) {
 }
 
 function renderAll() {
-  for (const k of ["setups", "watch", "leaders", "mine"]) for (const r of L[k] || []) BY[r.symbol] = Object.assign(BY[r.symbol] || {}, r);
+  for (const k of ["setups", "watch", "leaders", "mine", "sells", "holding"]) for (const r of L[k] || []) BY[r.symbol] = Object.assign(BY[r.symbol] || {}, r);
   for (const r of L.setups) BY[r.symbol] = r;
   brief(); today(); leaders(); sectors(); record(); how();
   if ($("#tab-sectors").classList.contains("on")) marketCharts();
@@ -109,29 +109,116 @@ function brief() {
   $("#notice").textContent = notes.join(" ");
 }
 
-function rowSetup(r) {
-  return `<button class="row" data-sym="${esc(r.symbol)}" data-kind="setup">
-    <div><div class="sym">${esc(r.symbol)} ${r.watchlist ? '<span class="tag pen">Watchlist</span>' : ""}</div><div class="nm">${esc(r.name)}</div></div>
-    ${spark(r.spark)}
-    <div><div class="num">${pct(r.prob)}</div><div class="sub">won before, avg ${spct(r.ev)}</div></div>
-    <div class="meta"><span>Close <b>${inr(r.close)}</b></span><span>Sell once it closes above <b>${inr(r.sma5)}</b> (5-day avg)</span>
-      <span>Down <b class="neg">${spct(r.r5)}</b> in 5 days</span>${newsTag(r)}</div>
-  </button>`;
+function addSessions(dateStr, n) {
+  const d = new Date(dateStr + "T00:00:00");
+  let k = 0;
+  while (k < n) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) k++; }
+  return d.toLocaleDateString("en-IN", {weekday: "short", day: "numeric", month: "short"});
+}
+function bigSpark(vals, line) {
+  const v = (vals || []).filter(x => x != null);
+  if (v.length < 2) return "";
+  const W = 320, Hh = 56;
+  let lo = Math.min(...v), hi = Math.max(...v);
+  if (line != null) { lo = Math.min(lo, line); hi = Math.max(hi, line); }
+  const rng = hi - lo || 1, Y = x => (Hh - 4 - (x - lo) / rng * (Hh - 8)).toFixed(1);
+  const pts = v.map((x, i) => `${(i / (v.length - 1) * (W - 6) + 2).toFixed(1)},${Y(x)}`).join(" ");
+  const last = pts.split(" ").pop().split(",");
+  const col = v[v.length - 1] >= v[0] ? "var(--up)" : "var(--down)";
+  return `<svg class="bigspark" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="Price over the last 3 months">
+    ${line != null ? `<line x1="0" x2="${W}" y1="${Y(line)}" y2="${Y(line)}" stroke="var(--pen)" stroke-width="1.2" stroke-dasharray="4 4"/>` : ""}
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="${col}"/></svg>`;
+}
+function odds(p) {
+  const n = Math.round((p ?? 0) * 10);
+  return `<span class="dots" aria-hidden="true">${Array.from({length: 10}, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span>`;
+}
+function topPct(r) { return Math.max(1, Math.round((1 - (r.mom_pct ?? 0)) * 100)); }
+function why(r) {
+  const parts = [`One of the strongest stocks: top ${topPct(r)}% over 6–12 months (6 months ${spct(r.r126, 0)}).`];
+  if (r.r5 != null) parts.push(`${r.r5 < 0 ? "Fell " + spct(-r.r5).slice(1) : "Moved " + spct(r.r5)} in the last 5 days${r.vol_ratio != null ? (r.vol_ratio < 1.5 ? " on normal volume, so likely a pause, not panic" : " on heavy volume") : ""}.`);
+  return parts.join(" ");
+}
+function details(r, extra = "") {
+  const head = (r.news || [])[0];
+  return `<details class="more"><summary>More details</summary>
+    <dl class="kv">
+      <div><dt>1 month</dt><dd class="${sign(r.r21)}">${spct(r.r21)}</dd></div>
+      <div><dt>3 months</dt><dd class="${sign(r.r63)}">${spct(r.r63)}</dd></div>
+      <div><dt>6 months</dt><dd class="${sign(r.r126)}">${spct(r.r126, 0)}</dd></div>
+      <div><dt>From 52-week high</dt><dd>${spct(r.from_high)}</dd></div>
+      <div><dt>2-day RSI</dt><dd>${r.rsi2 ?? "–"} <span class="muted">(setup below ${L.meta.rules.dip_rsi2})</span></dd></div>
+      <div><dt>Volume vs usual</dt><dd>${r.vol_ratio != null ? r.vol_ratio.toFixed(1) + "×" : "–"}</dd></div>
+      ${r.delivery != null ? `<div><dt>Delivery today</dt><dd>${r.delivery.toFixed(0)}% <span class="muted">(shares actually taken home)</span></dd></div>` : ""}
+      ${extra}
+    </dl>
+    ${head ? `<p class="headline"><span class="muted">Latest headline:</span> <a href="${esc(head.link)}" target="_blank" rel="noopener">${esc(head.title)}</a> <span class="muted">${esc(head.source)}, ${short(head.date)}</span></p>` : ""}
+  </details>`;
+}
+function cardTop(r, label, cls) {
+  return `<div class="ac-top"><span class="tag ${cls}">${label}</span>${r.watchlist ? '<span class="tag pen">Watchlist</span>' : ""}${newsTag(r)}
+      <span class="ac-px">${inr(r.close)} <span class="${sign(r.r1)}">${spct(r.r1)}</span></span></div>
+    <h3 class="ac-sym">${esc(r.symbol)}</h3>
+    <div class="ac-nm">${esc(r.name)}${r.industry ? ", " + esc(r.industry) : ""}</div>`;
+}
+const chartBtn = r => `<button class="btn quiet ac-open" data-sym="${esc(r.symbol)}">Chart and news</button>`;
+
+function cardBuy(r) {
+  const nx = nextSession(L.meta.as_of), mr = L.meta.rules;
+  return `<article class="ac buy">
+    ${cardTop(r, "Buy at the open", "buy")}
+    ${bigSpark(r.spark, r.sma5)}
+    <div class="legend-s"><span class="ln-price">Price, 3 months</span><span class="ln-sell">Sell line (5-day avg)</span></div>
+    <p class="why"><b>Why:</b> ${why(r)}</p>
+    <ol class="plan-s">
+      <li><b>Buy ${esc(nx)} at the open</b>, near ${inr(r.close)}. Skip it if it opens above ${inr(r.close * 1.02)}.</li>
+      <li><b>Sell</b> the morning after it closes above ${inr(r.sma5)}, its 5-day average.</li>
+      <li><b>Latest exit:</b> ${addSessions(L.meta.as_of, mr.max_hold + 1)}, even if it hasn't happened.</li>
+    </ol>
+    <div class="oddsrow">${odds(r.prob)}<span><b>${Math.round(r.prob * 100)} of 100</b> similar trades made money, average ${spct(r.ev)} after costs</span></div>
+    ${details(r, `<div><dt>This stock's record</dt><dd>${r.own_n ? `${r.own_wins} of ${r.own_n} worked` : "No past setups on this stock"}</dd></div>`)}
+    ${chartBtn(r)}
+  </article>`;
+}
+function cardSell(r) {
+  const k = r.pick;
+  return `<article class="ac sell">
+    ${cardTop(r, "Sell at the open", "weak")}
+    <p class="why"><b>Why:</b> It closed at ${inr(r.close)}, above its 5-day average (${inr(r.sma5)}). That's the exit signal: the bounce has happened.</p>
+    <div class="pl"><div><span class="muted">Picked</span><b>${short(k.date)}</b></div><div><span class="muted">Bought near</span><b>${inr(k.entry)}</b></div>
+      <div><span class="muted">Result after costs</span><b class="${sign(k.ret)}">${spct(k.ret)}</b></div><div><span class="muted">Held</span><b>${k.days} day${k.days === 1 ? "" : "s"}</b></div></div>
+    ${k.replay ? `<p class="muted small">Tracked pick: applies if you bought it.</p>` : ""}
+    ${chartBtn(r)}
+  </article>`;
+}
+function cardHold(r) {
+  const k = r.pick, left = (r.max_hold ?? 10) - (k.days ?? 0), need = r.sma5 && r.close ? r.sma5 / r.close - 1 : null;
+  return `<article class="ac hold">
+    ${cardTop(r, `Holding, day ${k.days} of ${r.max_hold}`, "pen")}
+    ${bigSpark(r.spark, r.sma5)}
+    <div class="pl"><div><span class="muted">Bought near</span><b>${inr(k.entry)}</b></div><div><span class="muted">So far, after costs</span><b class="${sign(k.ret)}">${spct(k.ret)}</b></div>
+      <div><span class="muted">Sell line</span><b>${inr(r.sma5)}</b></div><div><span class="muted">Days left</span><b>${Math.max(0, left)}</b></div></div>
+    <p class="why"><b>Next:</b> keep holding. Sell the morning after a close above ${inr(r.sma5)}${need != null && need > 0 ? ` (about ${spct(need)} above today's close)` : ""}${left <= 1 ? ". Time limit reached: sell at the next open" : ""}.</p>
+    ${k.replay ? `<p class="muted small">Tracked pick: applies if you bought it.</p>` : ""}
+    ${chartBtn(r)}
+  </article>`;
 }
 function rowWatch(r) {
   const fill = Math.max(0, Math.min(1, (20 - (r.rsi2 ?? 20)) / 15));
+  const close = fill >= .9 ? "Very close" : fill >= .5 ? "Getting close" : "Starting to dip";
   return `<button class="row" data-sym="${esc(r.symbol)}">
     <div><div class="sym">${esc(r.symbol)}</div><div class="nm">${esc(r.name)}</div></div>
     ${spark(r.spark)}
     <div><div class="num ${sign(r.r5)}">${spct(r.r5)}</div><div class="sub">5 days</div></div>
-    <div class="meta"><span class="gauge" title="2-day RSI ${r.rsi2}; a setup needs below 5"><span><i style="width:${fill * 100}%"></i></span> ${fill >= .9 ? "Very close to a setup" : fill >= .5 ? "Getting close" : "Starting to dip"}</span>
-      <span>Rank in strength <b>top ${Math.max(1, Math.round((1 - (r.mom_pct ?? 0)) * 100))}%</b></span>${newsTag(r)}</div>
+    <div class="meta"><span class="gauge" title="2-day RSI ${r.rsi2}; a setup needs below ${L.meta.rules.dip_rsi2}"><span><i style="width:${fill * 100}%"></i></span> ${close} to a buy setup</span>
+      <span>Strength: <b>top ${topPct(r)}%</b></span>${newsTag(r)}</div>
   </button>`;
 }
 function rowMine(r) {
   const cls = {Strong: "buy", Mixed: "watch", Weak: "weak"}[r.health];
   const why = r.health === "Strong" ? "Above its 50-day average and in the stronger half of the market"
-    : r.health === "Weak" ? "Below its 200-day average or among the weakest stocks. If you hold it, review it."
+    : r.health === "Weak" ? "Below its 200-day average or among the weakest. If you hold it, review it."
     : "Trend is mixed";
   return `<button class="row" data-sym="${esc(r.symbol)}">
     <div><div class="sym">${esc(r.symbol)} <span class="tag ${cls}">${esc(r.health)}</span></div><div class="nm">${esc(why)}</div></div>
@@ -140,16 +227,24 @@ function rowMine(r) {
   </button>`;
 }
 function today() {
-  const n = L.setups.length, r = L.meta.rules;
-  $("#buyLede").textContent = n
-    ? `Buy near the open, then sell at the first close above the 5-day average, or after ${r.max_hold} trading days at the latest. % = how often this exact pattern ended in profit after costs.`
-    : L.market.regime === "up"
-      ? "No leader had a sharp enough dip today. Most days look like this; the rule waits for the right moment."
-      : "The rule is switched off while Nifty is below its 200-day average. In past downtrends, dips kept falling.";
-  $("#setups").innerHTML = n ? L.setups.map(rowSetup).join("") : `<div class="empty">Nothing to buy today.</div>`;
-  $("#watch").innerHTML = L.watch.length ? L.watch.slice(0, 12).map(rowWatch).join("") : `<div class="empty">No leaders are dipping right now.</div>`;
+  const S = L.sells || [], B = L.setups || [], Hd = L.holding || [], W = L.watch || [];
+  const tile = (id, n, label, cls) => `<a href="#${id}" class="todo-t ${n ? cls : "zero"}"><b>${n}</b><span>${label}</span></a>`;
+  $("#todo").innerHTML = tile("sec-sell", S.length, "to sell", "t-sell") + tile("sec-buy", B.length, "to buy", "t-buy")
+    + tile("sec-hold", Hd.length, "holding", "t-hold") + tile("sec-watch", W.length, "on watch", "t-watch");
+  const regimeUp = L.market.regime === "up";
+  let h = "";
+  if (S.length) h += `<h2 id="sec-sell">Sell at the next open</h2><p class="lede">These picks closed above their 5-day average. Take the profit or loss at the open.</p>${S.map(cardSell).join("")}`;
+  h += `<h2 id="sec-buy">Buy at the next open</h2>`;
+  h += B.length ? `<p class="lede">Strong stocks that just had a sharp, quiet dip. Use the same amount of money for each.</p>${B.map(cardBuy).join("")}`
+    : `<div class="rows"><div class="empty">${regimeUp ? "No buy setups today. Most days look like this; the rule waits for the right dip." : "Buying is paused: Nifty is below its 200-day average. In past downtrends, dips kept falling."}</div></div>`;
+  if (Hd.length) h += `<h2 id="sec-hold">Holding</h2><p class="lede">Open picks. Check them each evening.</p>${Hd.map(cardHold).join("")}`;
+  else h += `<h2 id="sec-hold">Holding</h2><div class="rows"><div class="empty">No open picks right now.</div></div>`;
+  h += `<h2 id="sec-watch">On watch</h2><p class="lede">Strong stocks already dipping. One more down day can turn them into buy setups.</p>
+    <div class="rows">${W.length ? W.slice(0, 12).map(rowWatch).join("") : `<div class="empty">No leaders are dipping right now.</div>`}</div>`;
+  $("#actions").innerHTML = h;
   $("#mine").innerHTML = L.mine.length ? L.mine.map(rowMine).join("")
     : `<div class="empty">Add NSE symbols to <code>watchlist.txt</code> in your GitHub repo to track them here.</div>`;
+  $$("#todo a").forEach(a => a.onclick = e => { e.preventDefault(); const t = document.getElementById(a.getAttribute("href").slice(1)); if (t) t.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"}); });
 }
 
 /* ------------------------------------------------------------------ leaders */
@@ -402,7 +497,7 @@ $("#sheet").addEventListener("click", e => { if (e.target.id === "sheet") closeS
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#sheet").hidden) closeSheet(); });
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-sym]");
-  if (el && !el.closest("#leaderMap") && !el.closest("#secDetail") && !el.closest("#sheet")) openStock(el.dataset.sym);
+  if (el && !el.closest("#todo") && !el.closest("#leaderMap") && !el.closest("#secDetail") && !el.closest("#sheet")) openStock(el.dataset.sym);
 });
 
 /* ------------------------------------------------------------------ tabs */

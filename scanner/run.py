@@ -234,9 +234,31 @@ def main():
     history.sort(key=lambda k: (k["date"], k["prob"]), reverse=True)
     track = summarize(history)
 
+    # ---- trades to act on: exit signals today and open holdings
+    as_of_s = as_of.strftime("%Y-%m-%d")
+    sells, holding = [], []
+    for k in history:
+        sym = k["symbol"]
+        if sym not in p.C.columns or not np.isfinite(p.C[sym].iloc[t]):
+            continue
+        if k["status"] == "DONE" and k.get("exit_date") == as_of_s:
+            dest = sells
+        elif k["status"] == "OPEN":
+            dest = holding
+        else:
+            continue
+        row = model.stock_row(p, sym, t, universe)
+        row["pick"] = {x: k.get(x) for x in ("date", "entry", "price", "ret", "days", "why", "prob", "replay")}
+        row["max_hold"] = C.MAX_HOLD
+        dest.append(row)
+    holding.sort(key=lambda r: r["pick"]["date"])
+    for r in sells + holding:
+        r["delivery"] = dinfo["delivery"].get(r["symbol"])
+        r["watchlist"] = r["symbol"] in watch
+
     # ---- charts (loaded lazily by the app)
     charts = {}
-    for r in setups + watchl + leaders + mine:
+    for r in setups + watchl + leaders + mine + sells + holding:
         if r["symbol"] not in charts:
             charts[r["symbol"]] = model.chart(p, r["symbol"])
 
@@ -261,6 +283,7 @@ def main():
             "backtest": bt}
 
     _write("latest.json", {"meta": meta, "market": mk, "setups": setups, "watch": watchl,
+                           "sells": sells, "holding": holding,
                            "leaders": leaders, "sectors": secs, "mine": mine, "track": track})
     _write("history.json", history[:1500])
     _write("charts.json", charts)
@@ -271,7 +294,7 @@ def main():
     if prev_meta.get("as_of") == meta["as_of"] and prev_meta.get("model") == C.MODEL_VERSION:
         print("[run] no new trading day — no alert")
         return
-    payload = {"meta": meta, "setups": setups, "watch": watchl, "mine": mine, "track": track,
+    payload = {"meta": meta, "setups": setups, "watch": watchl, "mine": mine, "track": track, "sells": sells,
                "market": mk, "sectors": secs}
     notify.send(notify.build_message(payload))
     notify.send_push(notify.push_payload(payload))
