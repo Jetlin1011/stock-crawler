@@ -151,6 +151,13 @@ def main():
         print(f"[run] downloading {len(symbols)} symbols")
         raw = data.fetch_history(symbols, C.HISTORY_YEARS)
         index_df = data.fetch_index(C.HISTORY_YEARS)
+        # Never use a half-finished day: before 6 PM IST, drop any bar dated today (market still open / settling).
+        if now.hour < 18:
+            today = pd.Timestamp(now.date())
+            raw = {s: df[df.index < today] for s, df in raw.items()}
+            if index_df is not None:
+                index_df = index_df[index_df.index < today]
+            print(f"[run] before 6 PM IST: ignoring any {today.date()} bars")
         try:
             dinfo.update(data.patch_with_nse(raw, index_df, now))
             if dinfo["patched_days"]:
