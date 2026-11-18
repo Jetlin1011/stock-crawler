@@ -1,0 +1,37 @@
+name: Tag releases
+
+# Creates a git tag and a GitHub Release (with notes from CHANGELOG.md) for every line in .github/releases.txt
+on:
+  push:
+    paths: [".github/releases.txt"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create missing tags and releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "stock-crawler-bot"
+          git config user.email "actions@users.noreply.github.com"
+          LATEST=$(grep -v '^#' .github/releases.txt | grep -v '^$' | tail -1 | cut -d'|' -f1)
+          grep -v '^#' .github/releases.txt | grep -v '^$' | while IFS='|' read -r tag sha title; do
+            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              git tag -a "$tag" "$sha" -m "$tag: $title"
+              git push origin "$tag"
+            fi
+            if ! gh release view "$tag" >/dev/null 2>&1; then
+              ver="${tag#v}"
+              awk -v v="$ver" 'index($0, "## " v " ") == 1 {f=1; next} /^## / {if (f) exit} f' CHANGELOG.md > notes.md
+              latest="--latest=false"; [ "$tag" = "$LATEST" ] && latest="--latest"
+              gh release create "$tag" --title "$tag: $title" --notes-file notes.md $latest
+            fi
+          done
