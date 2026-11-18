@@ -39,7 +39,7 @@
     <button data-tab="today" class="on"><svg><use href="#i-today"/></svg><span>Today</span></button>
     <button data-tab="leaders"><svg><use href="#i-lead"/></svg><span>Leaders</span></button>
     <button data-tab="sectors"><svg><use href="#i-sect"/></svg><span>Sectors</span></button>
-    <button data-tab="record"><svg><use href="#i-rec"/></svg><span>Record</span></button>
+    <button data-tab="record"><svg><use href="#i-rec"/></svg><span>Accuracy</span></button>
     <button data-tab="more"><svg><use href="#i-more"/></svg><span>More</span></button>
   </nav>
   <button id="refreshBtn" class="icon-btn" aria-label="Check for new results"><svg><use href="#i-refresh"/></svg></button>
@@ -50,11 +50,17 @@
 <main id="main">
   <section id="tab-today" class="tab on" aria-label="Today">
     <div class="brief" id="brief"></div>
-    <nav class="todo" id="todo" aria-label="What to check"></nav>
     <div class="cols">
-      <div id="actions"></div>
       <div>
-        <h2 id="sec-mine">Your watchlist</h2>
+        <h2 id="buyTitle">Buy at the next open</h2>
+        <p class="lede" id="buyLede"></p>
+        <div id="setups" class="rows"></div>
+        <h2>On watch</h2>
+        <p class="lede">Leaders already dipping. Any of these can become a setup after the next close.</p>
+        <div id="watch" class="rows"></div>
+      </div>
+      <div>
+        <h2>Your watchlist</h2>
         <p class="lede">Trend health of the stocks in <code>watchlist.txt</code>. It describes the trend; it isn't a prediction.</p>
         <div id="mine" class="rows"></div>
       </div>
@@ -95,7 +101,10 @@
     </div>
   </section>
 
-  <section id="tab-record" class="tab" aria-label="Track record">
+  <section id="tab-record" class="tab" aria-label="Accuracy">
+    <h2>Prediction vs what happened</h2>
+    <p class="lede">Each day's buy picks next to the real prices that followed. A pick counts as right when the finished trade made money after costs.</p>
+    <div id="acc"></div>
     <h2>How the rule has done</h2>
     <div id="recTop"></div>
     <h2>Every pick</h2>

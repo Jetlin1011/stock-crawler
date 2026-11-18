@@ -188,51 +188,13 @@ textarea{width:100%;font-size:12px;border:1px solid var(--rule);border-radius:8p
 
 .more-btn{margin:10px 0}
 
-/* Today: action checklist */
-.todo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0 4px}
-.todo-t{display:flex;flex-direction:column;align-items:flex-start;padding:10px 12px;border-radius:12px;text-decoration:none;color:var(--ink);
-  background:var(--sheet);border:1px solid var(--rule);min-height:64px}
-.todo-t b{font-size:24px;line-height:1.1}
-.todo-t span{font-size:13px;color:var(--ink2)}
-.todo-t.t-sell{background:var(--down-soft);border-color:transparent} .todo-t.t-sell b{color:var(--down)}
-.todo-t.t-buy{background:var(--up-soft);border-color:transparent} .todo-t.t-buy b{color:var(--up)}
-.todo-t.t-hold{background:var(--pen-soft);border-color:transparent} .todo-t.t-hold b{color:var(--pen)}
-.todo-t.t-watch{background:var(--watch-soft);border-color:transparent} .todo-t.t-watch b{color:var(--watch)}
-.todo-t.zero b{color:var(--ink2)}
-h2[id^="sec-"]{scroll-margin-top:72px}
-
-.ac{background:var(--sheet);border:1px solid var(--rule);border-radius:14px;padding:14px 16px 16px;margin:0 0 12px;
-  border-left:5px solid var(--rule)}
-.ac.buy{border-left-color:var(--up)} .ac.sell{border-left-color:var(--down)} .ac.hold{border-left-color:var(--pen)}
-.ac-top{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.ac-px{margin-left:auto;font-weight:600;font-size:15px;white-space:nowrap}
-.ac-px span{font-weight:500;font-size:13.5px;margin-left:4px}
-.ac-sym{font-size:24px;letter-spacing:-.02em;margin:8px 0 0;line-height:1.15}
-.ac-nm{font-size:14px;color:var(--ink2)}
-.bigspark{width:100%;height:56px;display:block;margin:12px 0 4px}
-.legend-s{display:flex;gap:16px;font-size:12.5px;color:var(--ink2)}
-.legend-s span::before{content:"";display:inline-block;width:14px;height:0;margin-right:6px;vertical-align:middle}
-.ln-price::before{border-top:2px solid var(--ink2)} .ln-sell::before{border-top:2px dashed var(--pen)}
-.why{margin:12px 0 0;font-size:15px;line-height:1.5}
-.plan-s{margin:10px 0 0;padding-left:22px;font-size:15px}
-.plan-s li{margin:4px 0;padding-left:2px}
-.oddsrow{display:flex;align-items:center;gap:10px;margin:12px 0 0;padding:10px 12px;border-radius:10px;background:var(--tint);font-size:14px}
-.dots{display:inline-flex;gap:3px;flex:none}
-.dots i{width:9px;height:9px;border-radius:50%;background:var(--rule)}
-.dots i.on{background:var(--up)}
-.more{margin-top:12px;border-top:1px solid var(--rule);padding-top:8px}
-.more summary{cursor:pointer;font-weight:600;font-size:14.5px;padding:8px 0;min-height:44px;display:flex;align-items:center;list-style:none}
-.more summary::-webkit-details-marker{display:none}
-.more summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink2);border-bottom:2px solid var(--ink2);transform:rotate(45deg);margin-left:10px;margin-top:-4px;transition:transform .15s}
-.more[open] summary::after{transform:rotate(225deg);margin-top:4px}
-.kv{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:4px 0 0;border:1px solid var(--rule);border-radius:10px;overflow:hidden}
-.kv div{padding:8px 10px;border-top:1px solid var(--rule);border-left:1px solid var(--rule);margin:-1px 0 0 -1px}
-.kv dt{font-size:12.5px;color:var(--ink2)} .kv dd{margin:0;font-weight:600;font-size:15px}
-.kv dd .muted{font-weight:400;font-size:12px}
-.headline{font-size:14px;margin:10px 0 0}
-.pl{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 0}
-.pl div{display:flex;flex-direction:column;background:var(--tint);border-radius:10px;padding:8px 10px}
-.pl span{font-size:12px} .pl b{font-size:16px}
-.small{font-size:12.5px;margin:8px 0 0}
-.ac-open{margin-top:12px;width:100%}
-@media (max-width:520px){.pl{grid-template-columns:1fr 1fr}.todo{gap:6px}.todo-t{padding:8px 10px}.todo-t b{font-size:22px}}
+/* accuracy: prediction vs reality */
+.days{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.day{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.day header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--tint)}
+.day header .muted{font-size:13.5px}
+.pk{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,1.6fr) minmax(0,1.3fr);gap:4px 14px;padding:10px 14px;border-top:1px solid var(--rule);
+  font-size:14px;cursor:pointer;align-items:center}
+.pk:hover{background:var(--tint)}
+.pk-a{display:flex;flex-direction:column} .pk-a .muted{font-size:12.5px}
+@media (max-width:760px){.pk{grid-template-columns:1fr}}

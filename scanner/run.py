@@ -83,10 +83,19 @@ def replay_history(p, stats, universe):
 
 def update_history(history, p):
     pos = {d: i for i, d in enumerate(p.dates.strftime("%Y-%m-%d"))}
+    O, Cl = p.O.values, p.C.values
     for k in history:
-        if k["status"] == "DONE" or k["symbol"] not in p.C.columns or k["date"] not in pos:
+        if k["symbol"] not in p.C.columns or k["date"] not in pos:
             continue
         j, t = p.C.columns.get_loc(k["symbol"]), pos[k["date"]]
+        # what actually happened on the next trading day (for the prediction-vs-reality view)
+        if "d1_close" not in k and t + 1 < len(p.dates) and np.isfinite(Cl[t + 1, j]) and np.isfinite(O[t + 1, j]):
+            base = k.get("signal_close") or float(Cl[t, j])
+            k.update({"d1_date": p.dates[t + 1].strftime("%Y-%m-%d"), "d1_open": round(float(O[t + 1, j]), 2),
+                      "d1_close": round(float(Cl[t + 1, j]), 2), "d1_gap": round(float(O[t + 1, j]) / base - 1, 5),
+                      "d1_ret": round(float(Cl[t + 1, j]) / base - 1, 5)})
+        if k["status"] == "DONE":
+            continue
         r = model.simulate(p.O.values[:, j], p.H.values[:, j], p.L.values[:, j], p.C.values[:, j],
                            p.f[f"sma{C.EXIT_SMA}"].values[:, j], t)
         k["status"] = r["status"]
