@@ -377,6 +377,7 @@ function accuracy() {
 /* ------------------------------------------------------------------ how it works */
 function how() {
   const r = L.meta.rules, bt = L.meta.backtest;
+  $("#appVersion").innerHTML = `Version ${esc(L.meta.app_version || "–")}. <a href="https://github.com/Jetlin1011/stock-crawler/blob/main/CHANGELOG.md" target="_blank" rel="noopener">See what changed</a>`;
   $("#how").innerHTML = `
   <h2>How it works</h2>
   <p>Every weekday evening a scan runs on GitHub's servers. It downloads prices for ${L.meta.scanned} NSE stocks (the Nifty 500 plus your watchlist),

@@ -289,7 +289,7 @@ def main():
 
     mk = model.market(p)
     secs = model.sectors(p, universe)
-    meta = {"model": C.MODEL_VERSION, "as_of": as_of.strftime("%Y-%m-%d"), "as_of_label": as_of.strftime("%a %d %b %Y"),
+    meta = {"model": C.MODEL_VERSION, "app_version": C.APP_VERSION, "as_of": as_of.strftime("%Y-%m-%d"), "as_of_label": as_of.strftime("%a %d %b %Y"),
             "generated": now.strftime("%Y-%m-%d %H:%M IST"), "scanned": len(p.symbols),
             "universe": "demo" if a.demo else a.universe, "demo": a.demo, "news": not a.no_news, "data": dinfo_out,
             "vapid_public": os.environ.get("VAPID_PUBLIC_KEY") or None,

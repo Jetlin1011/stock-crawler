@@ -122,3 +122,16 @@ Actions stays free (2,000 min/month; this uses ~200). For the dashboard, connect
   (the regime pill at the top tells you which market you're in).
 - News tagging is keyword-based. Always open the headlines yourself.
 - Not investment advice.
+
+## Versions
+
+Every release has a version number, a plain-language entry in [CHANGELOG.md](CHANGELOG.md) and a tag on GitHub.
+Numbers use `MAJOR.MINOR.PATCH`: MAJOR when the trading rule changes, MINOR for new screens or features,
+PATCH for fixes. The running version is shown at the bottom of the app's More tab.
+
+To release a change:
+1. Bump `APP_VERSION` in `scanner/config.py` and `VERSION` in `docs/sw.js` (so phones load the new app).
+2. Add an entry at the top of `CHANGELOG.md`: what changed and why, in plain words.
+3. Commit with a message like `v2.3.0: <short summary>`, then tag it: `git tag -a v2.3.0 -m "<summary>"` and
+   `git push --tags`.
+4. If the trading rule changes, also bump `MODEL_VERSION` (this rebuilds the track record) and the MAJOR number.

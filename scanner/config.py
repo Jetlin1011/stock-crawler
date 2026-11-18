@@ -5,6 +5,10 @@ buy a short, sharp dip in a stock that is among the strongest 20% over 6-12 mont
 only while Nifty is in an uptrend; sell at the first close above the 5-day average (max 10 days).
 """
 
+# App version shown in the app. Bump it and add a CHANGELOG.md entry with every release (see README > Versions).
+APP_VERSION = "2.2.1"
+
+# Trading-rule version. Changing it rebuilds the track record.
 MODEL_VERSION = 2
 
 # Rule parameters
