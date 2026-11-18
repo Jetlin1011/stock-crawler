@@ -132,6 +132,7 @@ PATCH for fixes. The running version is shown at the bottom of the app's More ta
 To release a change:
 1. Bump `APP_VERSION` in `scanner/config.py` and `VERSION` in `docs/sw.js` (so phones load the new app).
 2. Add an entry at the top of `CHANGELOG.md`: what changed and why, in plain words.
-3. Commit with a message like `v2.3.0: <short summary>`, then tag it: `git tag -a v2.3.0 -m "<summary>"` and
-   `git push --tags`.
+3. Commit with a message like `v2.3.0: <short summary>`. Then add a line `v2.3.0|<commit>|<short title>` to
+   `.github/releases.txt` and push: the "Tag releases" workflow creates the tag and a Releases page entry whose
+   notes come from the CHANGELOG.
 4. If the trading rule changes, also bump `MODEL_VERSION` (this rebuilds the track record) and the MAJOR number.
