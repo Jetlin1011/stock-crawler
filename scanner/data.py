@@ -166,9 +166,12 @@ def patch_with_nse(raw: dict, index_df, now_ist) -> dict:
     end = pd.Timestamp(now_ist.date())
     if now_ist.hour < 18 or (now_ist.hour == 18 and now_ist.minute < 30):
         end -= pd.Timedelta(days=1)
-    days = [last] + [d for d in pd.bdate_range(last + pd.Timedelta(days=1), end)]
+    # last few sessions up to today: fills days missing for *any* stock, not only days missing for all
+    days = list(pd.bdate_range(last - pd.Timedelta(days=7), end))
     s = _nse_session()
     for d in days[-6:]:
+        if d.weekday() >= 5:
+            continue
         tag = d.strftime("%d%m%Y")
         bhav = _get_csv(s, NSE_FULL.format(d=tag))
         time.sleep(1)
@@ -184,8 +187,6 @@ def patch_with_nse(raw: dict, index_df, now_ist) -> dict:
         rows.index = bhav["SYMBOL"].values
         info["delivery"] = {k: float(v) for k, v in rows["deliv"].dropna().items() if k in raw}
         info["delivery_date"] = d.strftime("%Y-%m-%d")
-        if d <= last:
-            continue
         added = 0
         for sym, df in raw.items():
             if sym in rows.index and d not in df.index:
@@ -193,8 +194,9 @@ def patch_with_nse(raw: dict, index_df, now_ist) -> dict:
                 if isinstance(r, pd.DataFrame):
                     r = r.iloc[0]
                 if pd.notna(r["Close"]) and r["Close"] > 0:
-                    raw[sym] = pd.concat([df, pd.DataFrame([r[["Open", "High", "Low", "Close", "Volume"]].values],
-                                                           columns=df.columns, index=[d])])
+                    row = pd.DataFrame([r[["Open", "High", "Low", "Close", "Volume"]].astype(float).values],
+                                       columns=df.columns, index=[d])
+                    raw[sym] = pd.concat([df, row]).sort_index()
                     added += 1
         if added:
             info["patched_days"].append(d.strftime("%Y-%m-%d"))
