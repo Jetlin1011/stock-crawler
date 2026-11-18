@@ -1,11 +1,9 @@
 # One line per release, oldest first:  tag|commit|short title
 # Add a line (and a CHANGELOG.md entry) for each new version; the "Tag releases" workflow creates the tag and release page.
-v1.0.0|eaded08|First version: dip scanner, news check, alerts, installable app
-v1.1.0|4f20441|Tools: test notification and research data export
+# v1.0.0|eaded08|First version: dip scanner, news check, alerts, installable app   (no GitHub release: older workflow files; see CHANGELOG.md)
+# v1.1.0|4f20441|Tools: test notification and research data export   (no GitHub release: older workflow files; see CHANGELOG.md)
 v2.0.0|cb68a6a|New rule (momentum leader dip), NSE data fill-in, redesigned app
 v2.1.0|37d16a5|Today tab checklist layout (replaced in 2.2.0)
 v2.1.1|7adf324|Data fixes: no half-day prices, per-stock NSE fill-in, no duplicate buys
 v2.2.0|a74e1df|Accuracy tab: prediction vs what happened
 v2.2.1|6463f52|Readable versions: changelog, tags, version in app
-# updated 2026-11-18
-# retry 05:18:25

@@ -38,5 +38,4 @@ jobs:
       - name: Save log
         if: always()
         run: |
-          mkdir -p .github && mv release-log.txt .github/release-log.txt 2>/dev/null || true
-          git add .github/release-log.txt && git commit -qm "Release log" && git push origin HEAD:main || true
+          cat release-log.txt 2>/dev/null || true
