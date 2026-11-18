@@ -302,7 +302,8 @@ def main():
     if prev_meta.get("as_of") == meta["as_of"] and prev_meta.get("model") == C.MODEL_VERSION:
         print("[run] no new trading day — no alert")
         return
-    payload = {"meta": meta, "setups": setups, "watch": watchl, "mine": mine, "track": track, "sells": sells,
+    held = {r["symbol"] for r in holding}
+    payload = {"meta": meta, "setups": [r for r in setups if r["symbol"] not in held], "watch": watchl, "mine": mine, "track": track, "sells": sells,
                "market": mk, "sectors": secs}
     notify.send(notify.build_message(payload))
     notify.send_push(notify.push_payload(payload))
