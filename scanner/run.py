@@ -231,6 +231,7 @@ def main():
     if a.rebuild or prev_meta.get("model") != C.MODEL_VERSION or not history:
         print("[run] new model version: replaying track record")
         history = replay_history(p, stats, universe)
+    history = [k for k in history if k["date"] <= as_of.strftime("%Y-%m-%d")]   # drop picks from partial-day runs
     known = {k["id"] for k in history}
     open_syms = {k["symbol"] for k in history if k["status"] in ("OPEN", "PENDING")}
     for r in setups:
