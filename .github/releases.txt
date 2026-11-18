@@ -8,3 +8,4 @@ v2.1.1|7adf324|Data fixes: no half-day prices, per-stock NSE fill-in, no duplica
 v2.2.0|a74e1df|Accuracy tab: prediction vs what happened
 v2.2.1|6463f52|Readable versions: changelog, tags, version in app
 # updated 2026-11-18
+# retry 05:18:25

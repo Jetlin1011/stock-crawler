@@ -20,6 +20,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set +e
           git config user.name "stock-crawler-bot"
           git config user.email "actions@users.noreply.github.com"
           LATEST=$(grep -v '^#' .github/releases.txt | grep -v '^$' | tail -1 | cut -d'|' -f1)
@@ -29,6 +30,13 @@ jobs:
               ver="${tag#v}"
               awk -v v="$ver" 'index($0, "## " v " ") == 1 {f=1; next} /^## / {if (f) exit} f' CHANGELOG.md > notes.md
               latest="--latest=false"; [ "$tag" = "$LATEST" ] && latest="--latest"
-              gh release create "$tag" --target "$full" --title "$tag: $title" --notes-file notes.md $latest
+              gh release create "$tag" --target "$full" --title "$tag: $title" --notes-file notes.md $latest >> release-log.txt 2>&1 \
+                || echo "FAILED $tag" >> release-log.txt
             fi
           done
+          echo "done $(date -u)" >> release-log.txt
+      - name: Save log
+        if: always()
+        run: |
+          mkdir -p .github && mv release-log.txt .github/release-log.txt 2>/dev/null || true
+          git add .github/release-log.txt && git commit -qm "Release log" && git push origin HEAD:main || true
