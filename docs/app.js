@@ -82,7 +82,8 @@ function newsTag(r) {
 
 /* ------------------------------------------------------------------ today */
 function brief() {
-  const m = L.meta, mk = L.market, n = L.setups.length, w = L.watch.length;
+  const held = new Set((L.holding || []).map(r => r.symbol));
+  const m = L.meta, mk = L.market, n = L.setups.filter(r => !held.has(r.symbol)).length, w = L.watch.length;
   const nx = nextSession(m.as_of);
   let head;
   if (mk.regime !== "up") head = "Market in a downtrend. No dip buys until Nifty is back above its 200-day average.";
@@ -227,7 +228,9 @@ function rowMine(r) {
   </button>`;
 }
 function today() {
-  const S = L.sells || [], B = L.setups || [], Hd = L.holding || [], W = L.watch || [];
+  const S = L.sells || [], Hd = L.holding || [], W = L.watch || [];
+  const held = new Set(Hd.map(r => r.symbol));
+  const B = (L.setups || []).filter(r => !held.has(r.symbol));   // one position per stock
   const tile = (id, n, label, cls) => `<a href="#${id}" class="todo-t ${n ? cls : "zero"}"><b>${n}</b><span>${label}</span></a>`;
   $("#todo").innerHTML = tile("sec-sell", S.length, "to sell", "t-sell") + tile("sec-buy", B.length, "to buy", "t-buy")
     + tile("sec-hold", Hd.length, "holding", "t-hold") + tile("sec-watch", W.length, "on watch", "t-watch");
