@@ -13,6 +13,18 @@ Commits named `Scan …` are the automatic daily data updates, not code changes.
 
 ---
 
+## 2.3.0 — 22 Nov 2026
+**AI news check on buy picks**
+- After the rule picks its buys, two AIs read each pick's headlines from the past week: Claude (on the owner's
+  Claude Pro plan) and Google Gemini (free) as a second opinion. They answer one question: did the stock fall because
+  of real bad news about the company?
+- A plain rule, not an AI, gives each pick a label: **AI: no bad news**, **AI: read the news first** or **AI: skip**.
+  Skipped picks are left out of the alert but still followed on paper.
+- The AIs never change prices, never add picks, and must quote a real headline word for word, or their answer is ignored.
+- New **AI news check vs the plain rule** section on the Accuracy tab: two virtual ₹1,00,000 accounts (follow every
+  pick vs skip what the AI skipped) and results by label, so you can see whether the AI actually helps.
+- The trading rule is unchanged. Until the AI is set up (README → AI news check), everything works exactly as before.
+
 ## 2.2.1 — 18 Nov 2026
 **Readable versions**
 - Added this changelog and version tags on GitHub.

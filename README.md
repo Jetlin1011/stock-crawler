@@ -82,6 +82,28 @@ holdings get exit warnings listed first, marked ★.
 
 ---
 
+## AI news check (optional, free with Claude Pro)
+Since version 2.3.0, two AIs read the headlines of each buy pick and flag dips caused by real bad news about the
+company (fraud, regulator action, bad results, downgrades…). The rule still picks the stocks and sets the prices;
+the AI can only say "go", "read the news first" or "skip". Skipped picks are still tracked, and the Accuracy tab shows
+whether skipping them was right. Without these secrets the scan works exactly as before.
+
+**Claude (on your Claude Pro plan, no API key):**
+1. On your computer, install Claude Code. Windows PowerShell: `irm https://claude.ai/install.ps1 | iex`
+   (or with Node.js: `npm install -g @anthropic-ai/claude-code`).
+2. Run `claude setup-token`, sign in with your Claude Pro account in the browser, and copy the token it prints.
+3. GitHub → Settings → Secrets and variables → Actions → **Secret** `CLAUDE_CODE_OAUTH_TOKEN` = the token.
+
+It uses one short request per evening, from your normal Pro usage limits.
+
+**Gemini second opinion (free):**
+1. Go to aistudio.google.com/apikey → **Create API key**.
+2. Add **Secret** `GEMINI_API_KEY` = the key.
+
+With only one of the two set up, a pick is skipped only when that AI finds serious bad news; otherwise it gets
+"read the news first". Settings are in `scanner/config.py` (`AGENT_…`), and the instructions the AIs follow are at
+the top of `scanner/agents.py`.
+
 ## How to use the signals in Kite
 1. Read the notification / Today tab in the evening.
 2. Next morning, buy each setup in **CNC (delivery)** near the open. Skip it if it opens more than 2% above the signal close.

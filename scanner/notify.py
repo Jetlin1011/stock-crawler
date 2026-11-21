@@ -28,14 +28,22 @@ def build_message(d: dict) -> str:
     lines = [f"<b>📊 Stock Crawler — {e(meta['as_of_label'])}</b>",
              f"Market: {e(_mood(mk))}",
              f"Breadth: {round((mk.get('b50') or 0) * 100)}% of stocks above 50-day avg", ""]
+    skipped = [x for x in setups if (x.get("agent") or {}).get("verdict") == "SKIP"]
+    setups = [x for x in setups if x not in skipped]
     if setups:
         lines.append(f"<b>Buy at tomorrow's open</b> (leader dips, sell at first close above 5-day avg, max {C.MAX_HOLD} days):")
         for i, s in enumerate(setups[:C.TOP_ALERT], 1):
-            flag = " ⚠️news" if s.get("news_flag") == "risk" else ""
+            v = (s.get("agent") or {}).get("verdict")
+            flag = (" ✅AI: no bad news" if v == "GO" else " ⚠️AI: check the news first" if v == "CAUTION"
+                    else " ⚠️news" if s.get("news_flag") == "risk" else "")
             lines.append(f"{i}. <b>{e(s['symbol'])}</b> {_inr(s['close'])} · {s['prob']*100:.0f}% past win rate, "
                          f"avg {s['ev']*100:+.1f}%{flag}")
-    else:
+    elif not skipped:
         lines.append("No leader-dip setups today. Nothing to buy — that's normal on most days.")
+    if skipped:
+        lines += ["", "<b>🚫 Skipped by the AI news check</b> (still tracked, so you can see if skipping was right):"]
+        for x in skipped[:C.TOP_ALERT]:
+            lines.append(f"• <b>{e(x['symbol'])}</b>: {e(x['agent'].get('summary') or '')}")
     if d.get("sells"):
         lines += ["", "<b>Sell at tomorrow's open</b> (closed above 5-day avg): " + ", ".join(
             f"{e(x['symbol'])} {x['pick']['ret']*100:+.1f}%" for x in d["sells"][:8])]
@@ -71,12 +79,18 @@ def send(text: str) -> bool:
 # --------------------------------------------------------------------------- web push (PWA)
 
 def push_payload(d: dict) -> dict:
-    meta, setups, watch, mine = d["meta"], d["setups"], d["watch"], d["mine"]
+    meta, watch, mine = d["meta"], d["watch"], d["mine"]
+    skip = [s["symbol"] for s in d["setups"] if (s.get("agent") or {}).get("verdict") == "SKIP"]
+    setups = [s for s in d["setups"] if s["symbol"] not in skip]
+    mark = {"GO": " ✓", "CAUTION": " ⚠"}
     if setups:
-        top = ", ".join(f"{s['symbol']} {s['prob']*100:.0f}%" for s in setups[:4])
+        top = ", ".join(f"{s['symbol']} {s['prob']*100:.0f}%{mark.get((s.get('agent') or {}).get('verdict'), '')}"
+                        for s in setups[:4])
         body = f"Buy at open: {top}"
     else:
         body = "No setups today."
+    if skip:
+        body += " · AI skipped: " + ", ".join(skip[:3])
     if d.get("sells"):
         body += " · Sell: " + ", ".join(x["symbol"] for x in d["sells"][:3])
     if watch:

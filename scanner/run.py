@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from . import config as C
-from . import data, model, news, notify
+from . import agents, data, model, news, notify
 
 ROOT = data.ROOT
 OUT = os.path.join(ROOT, "docs", "data")
@@ -105,6 +105,16 @@ def update_history(history, p):
                       "exit_date": p.dates[r["exit_idx"]].strftime("%Y-%m-%d") if r.get("exit_idx") else None})
 
 
+def _paper(rows):
+    """Virtual account: C.PAPER_PER_TRADE rupees into each pick, from C.PAPER_START."""
+    live = [k for k in rows if k["status"] in ("DONE", "OPEN") and k.get("ret") is not None]
+    done = [k for k in live if k["status"] == "DONE"]
+    pnl = sum(C.PAPER_PER_TRADE * k["ret"] for k in live)
+    return {"start": C.PAPER_START, "per_trade": C.PAPER_PER_TRADE, "trades": len(live), "closed": len(done),
+            "pnl": round(pnl, 2), "value": round(C.PAPER_START + pnl, 2),
+            "open_pnl": round(sum(C.PAPER_PER_TRADE * k["ret"] for k in live if k["status"] == "OPEN"), 2)}
+
+
 def summarize(history):
     def s(rows):
         done = [k for k in rows if k["status"] == "DONE"]
@@ -121,6 +131,15 @@ def summarize(history):
     for k in history:
         if k["status"] == "DONE":
             months.setdefault(k["date"][:7], []).append(k["ret"])
+    # AI check vs plain rule, on live picks the AI looked at (same picks, same exits: a fair comparison)
+    checked = [k for k in history if not k.get("replay") and k.get("agent")]
+    if checked:
+        v = lambda k: k["agent"]["verdict"]
+        out["agent"] = {"since": min(k["date"] for k in checked), "all": s(checked),
+                        "go": s([k for k in checked if v(k) == "GO"]),
+                        "caution": s([k for k in checked if v(k) == "CAUTION"]),
+                        "skip": s([k for k in checked if v(k) == "SKIP"]),
+                        "paper": {"every": _paper(checked), "ai": _paper([k for k in checked if v(k) != "SKIP"])}}
     out["months"] = [{"m": m, "n": len(v), "avg": float(np.mean(v)), "win": sum(r > 0 for r in v) / len(v)}
                      for m, v in sorted(months.items())][-12:]
     return out
@@ -135,6 +154,7 @@ def main():
     ap.add_argument("--demo", action="store_true")
     ap.add_argument("--no-news", action="store_true")
     ap.add_argument("--no-notify", action="store_true")
+    ap.add_argument("--no-agents", action="store_true", help="skip the AI news check")
     ap.add_argument("--rebuild", action="store_true")
     a = ap.parse_args()
     now = datetime.now(IST)
@@ -234,6 +254,14 @@ def main():
             if src is not None and r is not src:
                 r["news"], r["news_flag"] = src.get("news"), src.get("news_flag")
 
+    # ---- AI news check on today's buy picks (never adds a pick or changes a price)
+    agent_info = None
+    if C.AGENTS_ON and not a.no_news and not a.no_agents:
+        try:
+            agent_info = agents.review(setups, as_of.strftime("%Y-%m-%d"))
+        except Exception as e:
+            print(f"[agents] check failed, picks go through unchecked: {e}")
+
     # ---- track record
     prev_meta = _read("latest.json", {}).get("meta", {})
     history = _read("history.json", [])
@@ -243,10 +271,17 @@ def main():
     history = [k for k in history if k["date"] <= as_of.strftime("%Y-%m-%d")]   # drop picks from partial-day runs
     known = {k["id"] for k in history}
     open_syms = {k["symbol"] for k in history if k["status"] in ("OPEN", "PENDING")}
+    byid = {k["id"]: k for k in history}
     for r in setups:
         pk = _pick(p, r["symbol"], t, universe, r, False)
+        ag = r.get("agent")
+        if ag and ag.get("verdict") != "unchecked":
+            pk["agent"] = {"verdict": ag["verdict"], "summary": ag.get("summary"), "evidence": ag.get("evidence"),
+                           "by": [o["by"] for o in ag.get("opinions", [])], "v": ag.get("v")}
         if pk["id"] not in known and r["symbol"] not in open_syms:
             history.append(pk)
+        elif pk["id"] in byid and "agent" in pk and "agent" not in byid[pk["id"]]:
+            byid[pk["id"]]["agent"] = pk["agent"]      # same-day re-run after the AI was set up
     update_history(history, p)
     history.sort(key=lambda k: (k["date"], k["prob"]), reverse=True)
     track = summarize(history)
@@ -292,7 +327,7 @@ def main():
     meta = {"model": C.MODEL_VERSION, "app_version": C.APP_VERSION, "as_of": as_of.strftime("%Y-%m-%d"), "as_of_label": as_of.strftime("%a %d %b %Y"),
             "generated": now.strftime("%Y-%m-%d %H:%M IST"), "scanned": len(p.symbols),
             "universe": "demo" if a.demo else a.universe, "demo": a.demo, "news": not a.no_news, "data": dinfo_out,
-            "vapid_public": os.environ.get("VAPID_PUBLIC_KEY") or None,
+            "vapid_public": os.environ.get("VAPID_PUBLIC_KEY") or None, "agents": agent_info,
             "rules": {"leader_pct": C.LEADER_PCT, "dip_rsi2": C.DIP_RSI2, "watch_rsi2": C.WATCH_RSI2,
                       "max_vol": C.MAX_VOL_MULT, "max_hold": C.MAX_HOLD, "exit_sma": C.EXIT_SMA,
                       "cost": C.COST_ROUNDTRIP, "min_turnover_cr": C.MIN_TURNOVER_CR,

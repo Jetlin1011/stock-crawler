@@ -198,3 +198,10 @@ textarea{width:100%;font-size:12px;border:1px solid var(--rule);border-radius:8p
 .pk:hover{background:var(--tint)}
 .pk-a{display:flex;flex-direction:column} .pk-a .muted{font-size:12.5px}
 @media (max-width:760px){.pk{grid-template-columns:1fr}}
+
+/* AI news check (2.3.0) */
+.row.skipped{opacity:.62}
+.row.skipped .num{text-decoration:line-through}
+.ai-line{grid-column:1/-1;font-size:13px;color:var(--ink2);margin-top:2px}
+.quote{display:block;font-style:italic;color:var(--ink2);margin:4px 0}
+.ai-lede{font-size:13.5px}

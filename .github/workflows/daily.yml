@@ -25,6 +25,8 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      HAS_CLAUDE: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +36,11 @@ jobs:
           cache: pip
 
       - run: pip install -r requirements.txt
+
+      # AI news check (2.3.0): Claude Code on your Claude Pro plan. Skipped if the token secret isn't set.
+      - name: Install Claude Code
+        if: env.HAS_CLAUDE == 'true'
+        run: npm install -g @anthropic-ai/claude-code && claude --version
 
       - name: Run scanner
         env:
@@ -45,6 +52,8 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ vars.VAPID_SUBJECT }}
           PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python -m scanner.run ${{ github.event.inputs.rebuild == 'true' && '--rebuild' || '' }}
 

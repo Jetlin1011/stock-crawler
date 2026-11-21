@@ -52,7 +52,7 @@ async function refresh(manual = false) {
 function renderAll() {
   for (const k of ["setups", "watch", "leaders", "mine"]) for (const r of L[k] || []) BY[r.symbol] = Object.assign(BY[r.symbol] || {}, r);
   for (const r of L.setups) BY[r.symbol] = r;
-  brief(); today(); leaders(); sectors(); accuracy(); record(); how();
+  brief(); today(); leaders(); sectors(); accuracy(); aiCheck(); record(); how();
   if ($("#tab-sectors").classList.contains("on")) marketCharts();
 }
 
@@ -74,6 +74,14 @@ function stateTag(s) {
   const cls = {"Dip setup": "buy", "Pulling back": "watch", "Near 52-week high": "pen", "Stretched": "weak"}[s] || "";
   return `<span class="tag ${cls}">${esc(s)}</span>`;
 }
+const AI = {
+  GO: {c: "buy", t: "AI: no bad news"}, CAUTION: {c: "watch", t: "AI: read the news first"},
+  SKIP: {c: "weak", t: "AI: skip"}};
+function aiTag(r) {
+  const a = r.agent || (r.pick || {}).agent, x = a && AI[a.verdict];
+  return x ? `<span class="tag ${x.c}">${x.t}</span>` : "";
+}
+const isSkip = r => (r.agent || {}).verdict === "SKIP";
 function newsTag(r) {
   if (r.news_flag === "risk") return `<span class="tag weak">Bad-news risk</span>`;
   if (r.news_flag === "positive") return `<span class="tag buy">Positive news</span>`;
@@ -82,7 +90,7 @@ function newsTag(r) {
 
 /* ------------------------------------------------------------------ today */
 function brief() {
-  const m = L.meta, mk = L.market, n = L.setups.length, w = L.watch.length;
+  const m = L.meta, mk = L.market, n = L.setups.filter(r => !isSkip(r)).length, w = L.watch.length;
   const nx = nextSession(m.as_of);
   let head;
   if (mk.regime !== "up") head = "Market in a downtrend. No dip buys until Nifty is back above its 200-day average.";
@@ -110,12 +118,14 @@ function brief() {
 }
 
 function rowSetup(r) {
-  return `<button class="row" data-sym="${esc(r.symbol)}" data-kind="setup">
+  const a = r.agent;
+  return `<button class="row${isSkip(r) ? " skipped" : ""}" data-sym="${esc(r.symbol)}" data-kind="setup">
     <div><div class="sym">${esc(r.symbol)} ${r.watchlist ? '<span class="tag pen">Watchlist</span>' : ""}</div><div class="nm">${esc(r.name)}</div></div>
     ${spark(r.spark)}
     <div><div class="num">${pct(r.prob)}</div><div class="sub">won before, avg ${spct(r.ev)}</div></div>
     <div class="meta"><span>Close <b>${inr(r.close)}</b></span><span>Sell once it closes above <b>${inr(r.sma5)}</b> (5-day avg)</span>
-      <span>Down <b class="neg">${spct(r.r5)}</b> in 5 days</span>${newsTag(r)}</div>
+      <span>Down <b class="neg">${spct(r.r5)}</b> in 5 days</span>${aiTag(r) || newsTag(r)}</div>
+    ${a && a.verdict !== "GO" && a.summary ? `<div class="ai-line">${esc(a.summary)}</div>` : ""}
   </button>`;
 }
 function rowWatch(r) {
@@ -146,7 +156,11 @@ function today() {
     : L.market.regime === "up"
       ? "No leader had a sharp enough dip today. Most days look like this; the rule waits for the right moment."
       : "The rule is switched off while Nifty is below its 200-day average. In past downtrends, dips kept falling.";
-  $("#setups").innerHTML = n ? L.setups.map(rowSetup).join("") : `<div class="empty">Nothing to buy today.</div>`;
+  const order = [...L.setups].sort((x, y) => isSkip(x) - isSkip(y));
+  $("#setups").innerHTML = n ? order.map(rowSetup).join("") : `<div class="empty">Nothing to buy today.</div>`;
+  const ag = L.meta.agents;
+  $("#aiLede").hidden = !(n && ag && ag.analysts && ag.analysts.length);
+  if (ag && ag.analysts) $("#aiLede").textContent = `The AI news check (${ag.analysts.join(" + ")}) read each pick's headlines. It never changes the rule's prices; it only flags dips caused by real bad news about the company. Skipped picks are still tracked on the Accuracy tab.`;
   $("#watch").innerHTML = L.watch.length ? L.watch.slice(0, 12).map(rowWatch).join("") : `<div class="empty">No leaders are dipping right now.</div>`;
   $("#mine").innerHTML = L.mine.length ? L.mine.map(rowMine).join("")
     : `<div class="empty">Add NSE symbols to <code>watchlist.txt</code> in your GitHub repo to track them here.</div>`;
@@ -290,7 +304,7 @@ function record() {
       <tbody>${rows.map(k => {
         const st = k.status === "DONE" ? (k.ret > 0 ? "DONE-w" : "DONE-l") : k.status;
         const lab = k.status === "DONE" ? spct(k.ret) : k.status === "OPEN" ? `Open ${spct(k.ret)}` : "Buys next open";
-        return `<tr data-sym="${esc(k.symbol)}"><td>${short(k.date)} ${k.replay ? '<span class="tag">Replay</span>' : ""}</td><td><b>${esc(k.symbol)}</b></td>
+        return `<tr data-sym="${esc(k.symbol)}"><td>${short(k.date)} ${k.replay ? '<span class="tag">Replay</span>' : ""}</td><td><b>${esc(k.symbol)}</b> ${aiTag(k)}</td>
           <td class="n">${pct(k.prob)}</td><td class="n">${inr(k.entry)}</td><td class="n">${inr(k.price)}</td>
           <td class="st-${st}">${lab}</td><td class="n">${k.days ?? "–"}</td></tr>`;
       }).join("")}</tbody>`;
@@ -352,7 +366,7 @@ function accuracy() {
       <header><div><b>Predicted ${day(d)}</b><div class="muted">${ks.length} buy${ks.length > 1 ? "s" : ""} for ${d1 ? day(d1) : "the next session"}${nm != null ? `, Nifty that day <span class="${sign(nm)}">${spct(nm)}</span>` : ""}</div></div>
         <span class="tag ${fin.length ? (ok === fin.length ? "buy" : ok === 0 ? "weak" : "watch") : ""}">${score}</span></header>
       ${ks.map(k => { const v = verdict(k); return `<div class="pk" data-sym="${esc(k.symbol)}">
-        <div class="pk-a"><b>${esc(k.symbol)}</b><span class="muted">${pct(k.prob)} chance shown, close ${inr(k.signal_close)}</span></div>
+        <div class="pk-a"><b>${esc(k.symbol)}</b> ${aiTag(k)}<span class="muted">${pct(k.prob)} chance shown, close ${inr(k.signal_close)}</span></div>
         <div class="pk-b">${k.d1_close != null ? `Next day: opened ${inr(k.d1_open)} <span class="${sign(k.d1_gap)}">(${spct(k.d1_gap)})</span>, closed ${inr(k.d1_close)} <b class="${sign(k.d1_ret)}">${spct(k.d1_ret)}</b>` : `<span class="muted">Next day's prices not in yet</span>`}</div>
         <div class="pk-c"><span class="tag ${v.c}">${v.t}</span> <span class="muted">${v.d}</span>${k.replay ? ' <span class="tag">Replay</span>' : ""}</div>
       </div>`; }).join("")}
@@ -374,6 +388,39 @@ function accuracy() {
   const mb = $("#accMore"); if (mb) mb.onclick = () => { accShow += 10; accuracy(); };
 }
 
+/* ------------------------------------------------------------------ AI check vs plain rule */
+function aiCheck() {
+  const ag = L.track.agent, info = L.meta.agents;
+  const stat = (k, v, s) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  if (!ag) {
+    $("#ai").innerHTML = `<p class="lede">${info && info.analysts && info.analysts.length
+      ? "The AI news check is on. Results appear here once its first picks are bought and sold."
+      : "The AI news check isn't set up yet, so every pick goes through on the rule alone. See README → AI news check."}</p>`;
+    return;
+  }
+  const g = (x, lab) => x && x.done ? `${pct(x.win)} won, avg ${spct(x.avg, 2)}, ${x.done} closed` : `${(x && x.open) || 0} open, none closed yet`;
+  const pe = ag.paper.every, pa = ag.paper.ai, diff = pa.value - pe.value;
+  const skipAvg = ag.skip.done ? ag.skip.avg : null, keepRows = [ag.go, ag.caution].filter(x => x.done);
+  const keepAvg = keepRows.length ? keepRows.reduce((a, x) => a + x.avg * x.done, 0) / keepRows.reduce((a, x) => a + x.done, 0) : null;
+  let say;
+  if (skipAvg == null || keepAvg == null) say = "Not enough closed picks yet to say whether the AI helps.";
+  else say = skipAvg < keepAvg
+    ? `So far the picks the AI skipped did worse (${spct(skipAvg, 2)} avg) than the ones it let through (${spct(keepAvg, 2)}). That's what you'd want to see.`
+    : `So far the picks the AI skipped did no worse (${spct(skipAvg, 2)} avg) than the ones it let through (${spct(keepAvg, 2)}). The AI isn't helping yet.`;
+  const n = ag.all.done;
+  $("#ai").innerHTML = `
+    <p class="lede">Every live pick since ${short(ag.since)} was checked by the AI, and every one is still tracked with the rule's own exits, including the ones it said to skip.
+      Two virtual accounts of ${inr(pe.start)} put ${inr(pe.per_trade)} into each pick: one follows every pick, the other skips what the AI skipped.</p>
+    <div class="stats">
+      ${stat("Follow every pick", inr(pe.value), `${spct(pe.pnl / pe.start, 2)} on ${pe.trades} trades`)}
+      ${stat("Follow the AI", inr(pa.value), `${spct(pa.pnl / pa.start, 2)} on ${pa.trades} trades · ${diff >= 0 ? "+" : "−"}${inr(Math.abs(diff))} vs every pick`)}
+      ${stat("AI said go", ag.go.done ? pct(ag.go.win) : "–", g(ag.go))}
+      ${stat("AI said caution", ag.caution.done ? pct(ag.caution.win) : "–", g(ag.caution))}
+      ${stat("AI said skip", ag.skip.done ? pct(ag.skip.win) : "–", g(ag.skip))}
+    </div>
+    <p class="lede">${say} ${n < 150 ? `Only ${n} closed so far; about 150–600 are needed before this means much, so keep following the rule until then.` : ""}</p>`;
+}
+
 /* ------------------------------------------------------------------ how it works */
 function how() {
   const r = L.meta.rules, bt = L.meta.backtest;
@@ -393,6 +440,16 @@ function how() {
   <p>Over ${r.years} years this made money on ${pct(bt.all.win)} of ${bt.all.n} trades, averaging ${spct(bt.all.avg, 2)} each after costs.
     Since ${short(r.test_split)} ${r.test_split.slice(0, 4)} (data the rule wasn't tuned on): ${pct(bt.test.win)} and ${spct(bt.test.avg, 2)}.
     That's a small edge per trade. It only adds up over many trades, so keep position sizes equal and modest.</p>
+  <h2>AI news check</h2>
+  <p>After the rule picks its buys, two AIs read each stock's headlines from the past week. Claude does it on your Claude Pro plan,
+    and Google Gemini (free) gives a second opinion. They answer one question: did it fall because of real bad news about the company?</p>
+  <ol>
+    <li><b>AI: no bad news.</b> Buy as normal.</li>
+    <li><b>AI: read the news first.</b> One AI found bad news, or it's minor. Open the stock and decide yourself.</li>
+    <li><b>AI: skip.</b> Both found serious bad news (fraud, regulator action, weak results, a downgrade…). The alert leaves it out.</li>
+  </ol>
+  <p>The AIs never change prices, never add picks, and must quote a real headline, or their answer is ignored. A plain rule, not an AI,
+    makes the final call. Skipped picks are still followed on paper, so the Accuracy tab shows whether skipping them was actually right.</p>
   <h2>Using it with Zerodha</h2>
   <ol>
     <li>In the evening, read the notification or the Today tab.</li>
@@ -423,6 +480,9 @@ async function openStock(sym) {
     <div class="plan">
       <div><span class="k">Buy</span><span>At the next open, near ${inr(r.close)}. Skip it if it opens more than 2% higher.</span></div>
       <div><span class="k">Sell</span><span>At the first close above the 5-day average (now ${inr(r.sma5)}), or after ${mr.max_hold} trading days.</span></div>
+      ${r.agent ? `<div><span class="k">AI check</span><span>${aiTag(r)} ${esc(r.agent.summary || "")}
+        ${r.agent.evidence ? `<span class="quote">“${esc(r.agent.evidence)}”</span>` : ""}
+        ${(r.agent.opinions || []).length > 1 ? `<span class="muted">${r.agent.opinions.map(o => `${esc(o.by.split(" ")[0])}: ${esc(o.cause.replace(/_/g, " "))}`).join(" · ")}</span>` : ""}</span></div>` : ""}
       <div><span class="k">History</span><span>${pct(r.prob)} of ${Number(r.base_n).toLocaleString("en-IN")} similar trades made money, averaging ${spct(r.ev, 2)} after costs.${r.own_n ? ` This stock: ${r.own_wins} of ${r.own_n}.` : ""}</span></div>
     </div>` : `
     <div class="plan">

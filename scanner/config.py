@@ -6,7 +6,7 @@ only while Nifty is in an uptrend; sell at the first close above the 5-day avera
 """
 
 # App version shown in the app. Bump it and add a CHANGELOG.md entry with every release (see README > Versions).
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.3.0"
 
 # Trading-rule version. Changing it rebuilds the track record.
 MODEL_VERSION = 2
@@ -47,3 +47,14 @@ BACKFILL_DAYS = 250
 CHART_BARS = 160
 SPARK_BARS = 60
 MARKET_BARS = 260
+
+# AI news check on buy picks (2.3.0). See scanner/agents.py. Turns itself off if no AI is set up.
+AGENTS_ON = True
+AGENT_CLAUDE_MODEL = "sonnet"            # Claude Code model alias, runs on your Claude Pro plan
+AGENT_GEMINI_MODEL = "gemini-flash-latest"   # free-tier second opinion
+AGENT_TIMEOUT_S = 240
+AGENT_PROMPT_VERSION = 1                 # bump when the instructions in agents.py change (recorded on each pick)
+
+# Paper accounts on the Accuracy tab: virtual money put into each live pick
+PAPER_START = 100000                     # ₹
+PAPER_PER_TRADE = 10000                  # ₹ per pick
