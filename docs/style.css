@@ -205,3 +205,30 @@ textarea{width:100%;font-size:12px;border:1px solid var(--rule);border-radius:8p
 .ai-line{grid-column:1/-1;font-size:13px;color:var(--ink2);margin-top:2px}
 .quote{display:block;font-style:italic;color:var(--ink2);margin:4px 0}
 .ai-lede{font-size:13.5px}
+
+/* AI desk (2.4.0) */
+.cast{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0 14px}
+.member{display:flex;gap:10px;align-items:center;background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;font-size:14px}
+.member .muted{font-size:12.5px}
+.av{flex:none;display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;font-weight:700;font-size:15px;color:#fff}
+.a-scout{background:var(--watch)} .a-claude{background:#C15F3C} .a-gemini{background:var(--pen)} .a-judge{background:var(--ink)}
+.a-judge{color:var(--sheet)}
+.session{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);padding:12px 14px;margin:12px 0;display:grid;gap:4px;font-size:15px}
+.session .note{font-size:13px;color:var(--watch)}
+.case{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);margin:12px 0;overflow:hidden}
+.case header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--rule);font-size:17px}
+.case.is-skip header{background:var(--down-soft)}
+.thread{padding:6px 14px 10px;position:relative}
+.say{display:grid;grid-template-columns:76px 1fr;gap:10px;padding:8px 0;align-items:start}
+.say .who{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12.5px}
+.bubble{background:var(--tint);border-radius:12px;border-top-left-radius:3px;padding:9px 12px;font-size:14.5px;line-height:1.45}
+.bubble .muted{font-size:13px;margin-top:4px}
+.heads{margin:2px 0 2px 86px;font-size:13.5px}
+.heads summary{cursor:pointer;color:var(--ink2)}
+.heads ul{margin:6px 0 0;padding-left:18px;display:grid;gap:6px}
+.case .result{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--rule);font-size:14px}
+.case .result .k{color:var(--ink2)}
+@media (max-width:420px){.say{grid-template-columns:56px 1fr}.heads{margin-left:66px}}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+.chips .chip{flex:none}
+.linkish{background:none;border:0;padding:0;font:inherit;font-weight:700;color:var(--ink);cursor:pointer}

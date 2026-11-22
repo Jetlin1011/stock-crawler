@@ -13,6 +13,15 @@ Commits named `Scan …` are the automatic daily data updates, not code changes.
 
 ---
 
+## 2.4.0 — 22 Nov 2026
+**New AI desk tab: see who said what**
+- A new **AI desk** tab shows each evening as a conversation between four players: the **Scout** (the price rule)
+  pitches each dip with its numbers, **Claude** and **Gemini** each say what the news shows (with the headline they
+  quoted), and the **Judge** (fixed rules) explains its decision in plain words.
+- Each case also shows the headlines the AIs read and, later, what actually happened to the trade.
+- Pick any of the last 15 evenings with the date chips. Evenings with no picks, a downtrend, or an AI that didn't
+  answer are shown too, so you can always see why nothing happened.
+
 ## 2.3.1 — 22 Nov 2026
 **Fix: Gemini second opinion**
 - Gemini's default free model was too slow and timed out. The check now uses the faster free Flash-Lite model first,

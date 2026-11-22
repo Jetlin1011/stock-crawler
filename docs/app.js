@@ -11,7 +11,7 @@ const day = s => s ? new Date(s + "T00:00:00").toLocaleDateString("en-IN", {week
 const short = s => s ? new Date(s + "T00:00:00").toLocaleDateString("en-IN", {day: "numeric", month: "short"}) : "–";
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-let L = null, H = [], CH = null, chartObjs = [];
+let L = null, H = [], D = [], CH = null, chartObjs = [];
 const BY = {};                                    // symbol -> row (any list)
 
 /* ------------------------------------------------------------------ data */
@@ -36,6 +36,7 @@ async function refresh(manual = false) {
     if (changed) {
       L = l; CH = null;
       H = await fetchJSON("data/history.json").catch(() => []);
+      D = await fetchJSON("data/desk.json").catch(() => []);
       renderAll();
     }
     if (!first && changed) toast("New scan loaded");
@@ -52,7 +53,7 @@ async function refresh(manual = false) {
 function renderAll() {
   for (const k of ["setups", "watch", "leaders", "mine"]) for (const r of L[k] || []) BY[r.symbol] = Object.assign(BY[r.symbol] || {}, r);
   for (const r of L.setups) BY[r.symbol] = r;
-  brief(); today(); leaders(); sectors(); accuracy(); aiCheck(); record(); how();
+  brief(); today(); desk(); leaders(); sectors(); accuracy(); aiCheck(); record(); how();
   if ($("#tab-sectors").classList.contains("on")) marketCharts();
 }
 
@@ -386,6 +387,85 @@ function accuracy() {
     ${dates.length > accShow ? `<button class="btn quiet more-btn" id="accMore">Show more days (${dates.length - accShow} left)</button>` : ""}`;
   $("#accLive").onchange = e => { accLive = e.target.checked; accShow = 10; accuracy(); };
   const mb = $("#accMore"); if (mb) mb.onclick = () => { accShow += 10; accuracy(); };
+}
+
+/* ------------------------------------------------------------------ AI desk: who said what */
+const CAST = {
+  scout:  {n: "Scout",  r: "The price rule. Finds the dips.", c: "a-scout",  i: "S"},
+  claude: {n: "Claude", r: "News analyst. Reads the headlines.", c: "a-claude", i: "C"},
+  gemini: {n: "Gemini", r: "Second opinion. Same headlines.", c: "a-gemini", i: "G"},
+  judge:  {n: "Judge",  r: "Fixed rules. Makes the call.", c: "a-judge",  i: "J"}};
+const CAUSE = {
+  company_bad_news: {t: "Company bad news", c: "weak"}, market_or_sector: {t: "Market or sector move", c: "pen"},
+  no_clear_news: {t: "No clear news", c: ""}, good_news: {t: "Good news", c: "buy"}};
+let deskDay = null;
+const av = k => `<span class="av ${CAST[k].c}" aria-hidden="true">${CAST[k].i}</span>`;
+function judgeWhy(p) {
+  const ops = p.opinions || [], bad = ops.filter(o => o.cause === "company_bad_news"), high = bad.filter(o => o.severity === "high");
+  if (p.verdict === "unchecked") return "The AI check didn't run, so the pick goes through on the rule alone.";
+  if (!ops.length) return "No company headlines this week, so there's nothing that could be bad news. Go.";
+  if (p.verdict === "SKIP") return ops.length > 1 ? "Both analysts found real bad news about the company, and it looks serious. Skip. (Still followed on paper.)"
+    : "The analyst found serious bad news about the company. Skip. (Still followed on paper.)";
+  if (p.verdict === "CAUTION") return bad.length < ops.length ? "The analysts disagree about bad news. Your call: read the headline first."
+    : "Bad news was found, but it looks minor. Your call: read the headline first.";
+  return "Nobody found bad news about the company itself. The dip looks temporary. Go.";
+}
+function outcome(id) {
+  const k = H.find(x => x.id === id);
+  if (!k) return null;
+  return verdict(k);
+}
+function deskCase(p) {
+  const v = AI[p.verdict], out = outcome(p.id);
+  const say = (who, body) => `<div class="say"><div class="who">${av(who)}<b>${CAST[who].n}</b></div><div class="bubble">${body}</div></div>`;
+  const scout = `Pitching <b>${esc(p.symbol)}</b>${p.name ? ` (${esc(p.name)})` : ""}. It fell <b class="neg">${spct(p.r5)}</b> in 5 days on ${p.vol_ratio != null ? `${p.vol_ratio.toFixed(1)}× its usual volume` : "normal volume"}.
+    ${p.base_n ? `In the past, <b>${pct(p.prob)}</b> of ${Number(p.base_n).toLocaleString("en-IN")} dips like this made money, averaging ${spct(p.ev, 2)} after costs.` : ""}
+    <div class="muted">Buy near ${inr(p.close)}, sell at the first close above ${inr(p.sma5)}.</div>`;
+  const heads = (p.headlines || []).length
+    ? `<details class="heads"><summary>${p.headlines.length} headline${p.headlines.length > 1 ? "s" : ""} the AIs read</summary><ul>${p.headlines.map(h =>
+        `<li><a href="${esc(h.link)}" target="_blank" rel="noopener">${esc(h.title)}</a> <span class="muted">${esc(h.source || "")}${h.date ? ", " + short(h.date) : ""}</span></li>`).join("")}</ul></details>`
+    : `<p class="muted heads">No headlines about this company in the past week.</p>`;
+  const opBy = name => (p.opinions || []).find(o => (o.by || "").toLowerCase().startsWith(name));
+  const opinion = (key, o) => {
+    if (!o) return say(key, `<span class="muted">${p.headlines && p.headlines.length ? "Didn't answer today." : "Nothing to read."}</span>`);
+    const c = CAUSE[o.cause] || CAUSE.no_clear_news;
+    return say(key, `<span class="tag ${c.c}">${c.t}${o.cause === "company_bad_news" ? (o.severity === "high" ? ", serious" : ", minor") : ""}</span> ${esc(o.reason || "")}
+      ${o.evidence ? `<span class="quote">“${esc(o.evidence)}”</span>` : ""}${o.rejected ? `<div class="muted">The quoted headline didn't exist, so this answer was ignored.</div>` : ""}`);
+  };
+  const res = out ? `<div class="result"><span class="k">What happened</span><span class="tag ${out.c}">${out.t}</span> <span class="muted">${out.d}</span></div>` : "";
+  return `<article class="case ${p.verdict === "SKIP" ? "is-skip" : ""}">
+    <header><button class="linkish" data-sym="${esc(p.symbol)}">${esc(p.symbol)} ›</button>${v ? `<span class="tag ${v.c}">${v.t}</span>` : `<span class="tag">Not checked</span>`}</header>
+    <div class="thread">
+      ${say("scout", scout)}
+      ${heads}
+      ${opinion("claude", opBy("claude"))}
+      ${opinion("gemini", opBy("gemini"))}
+      ${say("judge", `<b>${v ? v.t.replace("AI: ", "").replace(/^\w/, m => m.toUpperCase()) : "Go (unchecked)"}.</b> ${judgeWhy(p)}`)}
+    </div>
+    ${res}
+  </article>`;
+}
+function desk() {
+  $("#cast").innerHTML = Object.keys(CAST).map(k => `<div class="member">${av(k)}<div><b>${CAST[k].n}</b><div class="muted">${CAST[k].r}</div></div></div>`).join("");
+  if (!D.length) {
+    $("#deskDays").innerHTML = "";
+    $("#desk").innerHTML = `<div class="rows"><div class="empty">The desk log starts with the next evening scan.</div></div>`;
+    return;
+  }
+  if (!deskDay || !D.some(x => x.date === deskDay)) deskDay = D[0].date;
+  $("#deskDays").innerHTML = D.slice(0, 15).map(x => `<button class="chip ${x.date === deskDay ? "on" : ""}" data-d="${x.date}">${short(x.date)}${x.picks.length ? ` · ${x.picks.length}` : ""}</button>`).join("");
+  $$("#deskDays .chip").forEach(b => b.onclick = () => { deskDay = b.dataset.d; desk(); });
+  const x = D.find(s => s.date === deskDay), n = x.picks.length;
+  const counts = ["GO", "CAUTION", "SKIP"].map(k => [k, x.picks.filter(p => p.verdict === k).length]).filter(([, c]) => c);
+  const head = x.regime !== "up"
+    ? "Market in a downtrend, so the Scout stood down. No dip buys until Nifty is back above its 200-day average."
+    : n ? `The Scout pitched ${n} dip${n > 1 ? "s" : ""}. ${counts.length ? "Judge: " + counts.map(([k, c]) => `${c} ${AI[k].t.replace("AI: ", "")}`).join(", ") + "." : ""}`
+    : `The Scout found no dip that met the rule${x.watch ? ` (${x.watch} leader${x.watch > 1 ? "s" : ""} on watch)` : ""}. Nobody else had to work tonight.`;
+  $("#desk").innerHTML = `
+    <div class="session"><div class="muted">Evening of ${esc(x.label || day(x.date))}</div><b>${esc(head)}</b>
+      <div class="muted">${x.ai_on ? `On duty: ${x.analysts.map(esc).join(" + ")}` : "AI check was off this evening."}</div>
+      ${(x.notes || []).length ? `<div class="note">⚠ ${x.notes.map(esc).join(" · ")}</div>` : ""}</div>
+    ${x.picks.map(deskCase).join("")}`;
 }
 
 /* ------------------------------------------------------------------ AI check vs plain rule */

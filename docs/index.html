@@ -25,6 +25,7 @@
   <symbol id="i-lead" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
   <symbol id="i-sect" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></symbol>
   <symbol id="i-rec" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></symbol>
+  <symbol id="i-desk" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M2.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5M10.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
@@ -37,6 +38,7 @@
   </div>
   <nav class="tabs" id="tabs" aria-label="Sections">
     <button data-tab="today" class="on"><svg><use href="#i-today"/></svg><span>Today</span></button>
+    <button data-tab="desk"><svg><use href="#i-desk"/></svg><span>AI desk</span></button>
     <button data-tab="leaders"><svg><use href="#i-lead"/></svg><span>Leaders</span></button>
     <button data-tab="sectors"><svg><use href="#i-sect"/></svg><span>Sectors</span></button>
     <button data-tab="record"><svg><use href="#i-rec"/></svg><span>Accuracy</span></button>
@@ -66,6 +68,15 @@
         <div id="mine" class="rows"></div>
       </div>
     </div>
+  </section>
+
+  <section id="tab-desk" class="tab" aria-label="AI desk">
+    <h2>The AI desk</h2>
+    <p class="lede">Every evening four players look at the market. The <b>Scout</b> (the price rule) pitches dips, <b>Claude</b> reads the news,
+      <b>Gemini</b> gives a second opinion, and the <b>Judge</b> (fixed rules, not an AI) decides. Here's exactly what each one said.</p>
+    <div class="cast" id="cast"></div>
+    <div class="chips" id="deskDays"></div>
+    <div id="desk"></div>
   </section>
 
   <section id="tab-leaders" class="tab" aria-label="Momentum leaders">

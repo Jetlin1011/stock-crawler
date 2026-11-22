@@ -26,6 +26,14 @@ import requests
 
 from . import config as C
 
+NOTES: list[str] = []          # problems during today's check, shown on the AI desk
+
+
+def _note(msg: str) -> None:
+    print("[agents] " + msg)
+    NOTES.append(msg)
+
+
 CAUSES = ["company_bad_news", "market_or_sector", "no_clear_news", "good_news"]
 
 SCHEMA = {
@@ -108,18 +116,20 @@ def ask_claude(setups: list[dict]) -> dict | None:
         res = subprocess.run(cmd, input=_prompt(setups), capture_output=True, text=True,
                              timeout=C.AGENT_TIMEOUT_S)
     except Exception as e:
-        print(f"[agents] Claude failed: {e}")
+        _note(f"Claude didn't answer ({str(e)[:120]})")
         return None
     try:
         out = json.loads(res.stdout)
     except Exception:
         print(f"[agents] Claude gave no JSON (exit {res.returncode}): {(res.stderr or res.stdout)[:300]}")
+        _note("Claude didn't answer (no usable reply)")
         return None
     data = out.get("structured_output")
     if data is None and isinstance(out.get("result"), str):
         data = _loose_json(out["result"])
     if not data:
         print(f"[agents] Claude answer missing ({out.get('subtype') or out.get('is_error')})")
+        _note("Claude didn't answer (empty reply; usage limit or login problem?)")
         return None
     return {"by": f"Claude ({C.AGENT_CLAUDE_MODEL})", "picks": data.get("picks", [])}
 
@@ -142,6 +152,7 @@ def ask_gemini(setups: list[dict]) -> dict | None:
             break
         except Exception as e:
             print(f"[agents] Gemini {model} failed: {str(e)[:200]}")
+            _note(f"Gemini {model} didn't answer" + (" (timed out)" if "timed out" in str(e).lower() else ""))
     if text is None:
         return None
     data = _loose_json(text)
@@ -200,7 +211,8 @@ def judge(opinions: list[dict]) -> str:
 
 def review(setups: list[dict], as_of: str) -> dict:
     """Adds r['agent'] to each setup in place. Returns run info for the app."""
-    info = {"date": as_of, "prompt_version": C.AGENT_PROMPT_VERSION, "analysts": [], "checked": 0}
+    NOTES.clear()
+    info = {"date": as_of, "prompt_version": C.AGENT_PROMPT_VERSION, "analysts": [], "checked": 0, "notes": NOTES}
     if not setups:
         return info
     # a stock with no headlines at all can't have bad news: GO without spending AI calls
@@ -239,3 +251,20 @@ def review(setups: list[dict], as_of: str) -> dict:
     print(f"[agents] {info['checked']}/{len(setups)} picks checked by {info['analysts'] or 'no AI'}: "
           + ", ".join(f"{r['symbol']}={r.get('agent', {}).get('verdict')}" for r in setups))
     return info
+
+
+def session(setups: list[dict], info: dict | None, as_of: str, label: str, regime: str, n_watch: int) -> dict:
+    """One evening at the AI desk, in a form the app can show step by step."""
+    keep = ("symbol", "name", "industry", "prob", "ev", "base_n", "own_n", "own_wins", "r5", "close", "sma5",
+            "vol_ratio", "delivery")
+    picks = []
+    for r in setups:
+        a = r.get("agent") or {}
+        picks.append({**{k: r.get(k) for k in keep}, "id": f"{as_of}:{r['symbol']}",
+                      "headlines": [{k: n.get(k) for k in ("title", "source", "date", "link")}
+                                    for n in (r.get("news") or [])],
+                      "opinions": a.get("opinions", []), "verdict": a.get("verdict", "unchecked"),
+                      "summary": a.get("summary")})
+    return {"date": as_of, "label": label, "regime": regime, "watch": n_watch,
+            "analysts": (info or {}).get("analysts", []), "notes": list((info or {}).get("notes", [])),
+            "ai_on": info is not None and bool((info or {}).get("analysts")), "picks": picks}

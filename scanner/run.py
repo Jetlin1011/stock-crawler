@@ -338,6 +338,11 @@ def main():
                            "sells": sells, "holding": holding,
                            "leaders": leaders, "sectors": secs, "mine": mine, "track": track})
     _write("history.json", history[:1500])
+    # the AI desk: a readable log of each evening's decisions (last 90 sessions)
+    desk = [x for x in _read("desk.json", []) if x.get("date") != meta["as_of"]]
+    desk.append(agents.session(setups, agent_info, meta["as_of"], meta["as_of_label"], mk.get("regime"), len(watchl)))
+    desk.sort(key=lambda x: x["date"], reverse=True)
+    _write("desk.json", desk[:90])
     _write("charts.json", charts)
     print(f"[run] setups={len(setups)} watch={len(watchl)} leaders={len(leaders)} history={len(history)}")
 
