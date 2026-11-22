@@ -13,6 +13,11 @@ Commits named `Scan …` are the automatic daily data updates, not code changes.
 
 ---
 
+## 2.3.1 — 22 Nov 2026
+**Fix: Gemini second opinion**
+- Gemini's default free model was too slow and timed out. The check now uses the faster free Flash-Lite model first,
+  then tries the regular Flash model, and gives up on each after 75 seconds instead of 4 minutes.
+
 ## 2.3.0 — 22 Nov 2026
 **AI news check on buy picks**
 - After the rule picks its buys, two AIs read each pick's headlines from the past week: Claude (on the owner's

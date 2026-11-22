@@ -130,21 +130,25 @@ def ask_gemini(setups: list[dict]) -> dict | None:
     if not key:
         print("[agents] Gemini not set up (GEMINI_API_KEY) — skipping")
         return None
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{C.AGENT_GEMINI_MODEL}:generateContent"
     body = {"contents": [{"role": "user", "parts": [{"text": _prompt(setups)}]}],
             "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
-    try:
-        r = requests.post(url, params={"key": key}, json=body, timeout=C.AGENT_TIMEOUT_S)
-        r.raise_for_status()
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception as e:
-        print(f"[agents] Gemini failed: {str(e)[:200]}")
+    text = model = None
+    for model in C.AGENT_GEMINI_MODELS:     # fast free model first, then the next one
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        try:
+            r = requests.post(url, params={"key": key}, json=body, timeout=C.AGENT_GEMINI_TIMEOUT_S)
+            r.raise_for_status()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            break
+        except Exception as e:
+            print(f"[agents] Gemini {model} failed: {str(e)[:200]}")
+    if text is None:
         return None
     data = _loose_json(text)
     if not data:
         print("[agents] Gemini answer wasn't valid JSON")
         return None
-    return {"by": f"Gemini ({C.AGENT_GEMINI_MODEL})", "picks": data.get("picks", [])}
+    return {"by": f"Gemini ({model})", "picks": data.get("picks", [])}
 
 
 def _loose_json(s: str):
