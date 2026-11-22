@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 
 import requests
 
@@ -145,14 +146,25 @@ def ask_gemini(setups: list[dict]) -> dict | None:
     text = model = None
     for model in C.AGENT_GEMINI_MODELS:     # fast free model first, then the next one
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        try:
-            r = requests.post(url, params={"key": key}, json=body, timeout=C.AGENT_GEMINI_TIMEOUT_S)
-            r.raise_for_status()
-            text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        for attempt in range(3):            # Google's free tier is sometimes "busy" (503/429): wait and retry
+            try:
+                # key goes in a header, never in the URL, so it can't end up in an error message or log
+                r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=C.AGENT_GEMINI_TIMEOUT_S)
+                if r.status_code in (429, 500, 503) and attempt < 2:
+                    print(f"[agents] Gemini {model} busy ({r.status_code}), retrying")
+                    time.sleep(15 * (attempt + 1))
+                    continue
+                if not r.ok:
+                    raise RuntimeError(f"HTTP {r.status_code}")
+                text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            except requests.Timeout:
+                _note(f"Gemini {model} didn't answer (timed out)")
+            except Exception as e:
+                msg = str(e).replace(key, "***")[:120]
+                _note(f"Gemini {model} didn't answer ({msg})")
             break
-        except Exception as e:
-            print(f"[agents] Gemini {model} failed: {str(e)[:200]}")
-            _note(f"Gemini {model} didn't answer" + (" (timed out)" if "timed out" in str(e).lower() else ""))
+        if text is not None:
+            break
     if text is None:
         return None
     data = _loose_json(text)

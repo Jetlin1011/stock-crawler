@@ -13,6 +13,12 @@ Commits named `Scan …` are the automatic daily data updates, not code changes.
 
 ---
 
+## 2.4.1 — 22 Nov 2026
+**Fix: Gemini key could appear in run logs; retries when Gemini is busy**
+- The Gemini key is now sent in a request header instead of the web address, so it can never show up in an error
+  message or a GitHub Actions log. (Before this fix, one failed request printed the address, key included.)
+- When Google's free tier answers "busy" (503/429), the check waits and tries again up to twice before giving up.
+
 ## 2.4.0 — 22 Nov 2026
 **New AI desk tab: see who said what**
 - A new **AI desk** tab shows each evening as a conversation between four players: the **Scout** (the price rule)

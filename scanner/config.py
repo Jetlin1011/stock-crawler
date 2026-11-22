@@ -6,7 +6,7 @@ only while Nifty is in an uptrend; sell at the first close above the 5-day avera
 """
 
 # App version shown in the app. Bump it and add a CHANGELOG.md entry with every release (see README > Versions).
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 
 # Trading-rule version. Changing it rebuilds the track record.
 MODEL_VERSION = 2
